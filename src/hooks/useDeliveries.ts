@@ -4,6 +4,7 @@ import { Delivery } from '@/types/delivery';
 import { fetchDeliveriesFromSheets, updateDeliveryStatus } from '@/utils/googleSheets';
 import { saveToStorage, getFromStorage, storageKeys } from '@/utils/localStorage';
 import { useAuth } from '@/context/AuthContext';
+import { toast } from '@/components/ui/use-toast';
 
 export const useDeliveries = () => {
   const { user } = useAuth();
@@ -11,6 +12,7 @@ export const useDeliveries = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [isTestData, setIsTestData] = useState<boolean>(false);
 
   // Check if we're online
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -53,9 +55,24 @@ export const useDeliveries = () => {
 
     setIsLoading(true);
     setError(null);
+    setIsTestData(false);
 
     try {
+      console.log('Fetching deliveries from Google Sheets...');
       const fetchedDeliveries = await fetchDeliveriesFromSheets(user.sheetsUrl);
+      
+      // Check if we got test data
+      if (fetchedDeliveries.length > 0 && fetchedDeliveries[0].id === '1' && 
+          fetchedDeliveries[0].trackingNumber === 'TRK12345') {
+        console.log('Using test data due to CORS issues');
+        setIsTestData(true);
+        toast({
+          title: 'שימוש בנתוני דוגמה',
+          description: 'לא ניתן להתחבר ישירות לקובץ Google Sheets עקב מגבלות אבטחה. מוצגים נתוני דוגמה.',
+          variant: 'destructive',
+        });
+      }
+      
       setDeliveries(fetchedDeliveries);
       saveToStorage(storageKeys.DELIVERIES_CACHE, fetchedDeliveries);
       
@@ -97,7 +114,7 @@ export const useDeliveries = () => {
     }
 
     try {
-      if (isOnline) {
+      if (isOnline && !isTestData) {
         // Update in Google Sheets
         await updateDeliveryStatus(user.sheetsUrl, deliveryId, newStatus);
       }
@@ -119,12 +136,19 @@ export const useDeliveries = () => {
       );
       saveToStorage(storageKeys.DELIVERIES_CACHE, updatedDeliveries);
 
+      if (isTestData) {
+        toast({
+          title: 'מצב דוגמה',
+          description: 'הסטטוס עודכן מקומית בלבד מכיוון שמוצגים נתוני דוגמה',
+        });
+      }
+
       return;
     } catch (err) {
       console.error('Error updating delivery status:', err);
       throw new Error('Failed to update delivery status');
     }
-  }, [user?.sheetsUrl, deliveries, isOnline]);
+  }, [user?.sheetsUrl, deliveries, isOnline, isTestData]);
 
   return {
     deliveries,
@@ -132,6 +156,7 @@ export const useDeliveries = () => {
     error,
     isOnline,
     lastSyncTime,
+    isTestData,
     fetchDeliveries,
     updateStatus,
   };

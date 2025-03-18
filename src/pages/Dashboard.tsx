@@ -8,8 +8,9 @@ import Header from '@/components/layout/Header';
 import DeliveryTable from '@/components/deliveries/DeliveryTable';
 import { useAuth } from '@/context/AuthContext';
 import { useDeliveries } from '@/hooks/useDeliveries';
-import { WifiOff, RefreshCw } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Dashboard: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -21,7 +22,8 @@ const Dashboard: React.FC = () => {
     fetchDeliveries, 
     updateStatus,
     isOnline,
-    lastSyncTime
+    lastSyncTime,
+    isTestData
   } = useDeliveries();
   
   useEffect(() => {
@@ -79,6 +81,15 @@ const Dashboard: React.FC = () => {
               </span>
             </div>
           </div>
+          
+          {isTestData && (
+            <Alert variant="warning" className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                מוצגים נתוני דוגמה עקב מגבלות CORS. ייתכן שנדרש לעשות שיתוף פומבי לקובץ Google Sheets או להשתמש בפתרון שרת.
+              </AlertDescription>
+            </Alert>
+          )}
           
           {error ? (
             <div className="glass p-6 rounded-xl text-center">

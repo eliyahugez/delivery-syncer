@@ -4,7 +4,7 @@ export interface Delivery {
   trackingNumber: string;
   scanDate: string;
   statusDate: string;
-  status: string;
+  status: 'pending' | 'in_progress' | 'delivered' | 'failed' | 'returned' | string;
   name: string;
   phone: string;
   address: string;

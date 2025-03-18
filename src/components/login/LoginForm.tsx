@@ -6,8 +6,9 @@ import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Info } from 'lucide-react';
+import { Info, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const LoginForm: React.FC = () => {
   const [name, setName] = useState('');
@@ -99,11 +100,31 @@ const LoginForm: React.FC = () => {
           <div className="flex items-start mt-2 text-xs text-muted-foreground">
             <Info size={14} className="mr-1 mt-0.5 flex-shrink-0" />
             <p>
-              הקישור חייב להיות לגיליון Google Sheets עם הרשאות צפייה או עריכה.
+              הקישור חייב להיות לגיליון Google Sheets עם הרשאות צפייה ציבוריות.
               וודא שהגיליון מכיל את העמודות הנדרשות.
             </p>
           </div>
         </div>
+        
+        <Alert className="bg-secondary/50 border-primary/20">
+          <AlertDescription className="text-xs">
+            <div className="flex flex-col space-y-2">
+              <p>
+                <strong>חשוב: </strong>
+                עליך לפתוח את הרשאות השיתוף של הגיליון ל"כל מי שיש לו הקישור יכול לצפות".
+              </p>
+              <a 
+                href="https://support.google.com/docs/answer/2494822?hl=iw" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary flex items-center gap-1 hover:underline"
+              >
+                <ExternalLink size={12} />
+                <span>למידע נוסף על שיתוף קבצים בגוגל</span>
+              </a>
+            </div>
+          </AlertDescription>
+        </Alert>
         
         <Button 
           type="submit" 
