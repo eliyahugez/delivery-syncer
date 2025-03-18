@@ -48,7 +48,7 @@ export const useDeliveries = () => {
   // Fetch deliveries from Google Sheets
   const fetchDeliveries = useCallback(async () => {
     if (!user?.sheetsUrl) {
-      setError('No Google Sheets URL provided');
+      setError('לא סופק קישור לגליון Google');
       setIsLoading(false);
       return;
     }
@@ -59,13 +59,24 @@ export const useDeliveries = () => {
     try {
       console.log('Fetching deliveries from Google Sheets...');
       const { deliveries: fetchedDeliveries, isTestData: usingTestData } = await fetchDeliveriesFromSheets(user.sheetsUrl);
+      
+      console.log(`Fetched ${fetchedDeliveries.length} deliveries:`, fetchedDeliveries);
       setIsTestData(usingTestData);
       
       if (usingTestData) {
         console.log('Using test data due to CORS issues');
         toast({
           title: 'שימוש בנתוני דוגמה',
-          description: 'לא ניתן להתחבר ישירות לקובץ Google Sheets עקב מגבלות אבטחה. מוצגים נתוני דוגמה.',
+          description: 'לא ניתן להתחבר ישירות לקובץ Google Sheets. ודא שהקובץ משותף לצפייה ציבורית או השתמש בקישור לתצוגה.',
+          variant: 'warning',
+        });
+      }
+      
+      if (fetchedDeliveries.length === 0) {
+        console.warn('No deliveries fetched');
+        toast({
+          title: 'לא נמצאו משלוחים',
+          description: 'לא נמצאו משלוחים בגליון. ודא שהגליון מכיל את העמודות הנדרשות.',
           variant: 'destructive',
         });
       }
@@ -80,7 +91,7 @@ export const useDeliveries = () => {
       setIsLoading(false);
     } catch (err) {
       console.error('Error fetching deliveries:', err);
-      setError('Failed to fetch deliveries from Google Sheets');
+      setError('שגיאה בטעינת משלוחים מ-Google Sheets');
       setIsLoading(false);
     }
   }, [user?.sheetsUrl]);
@@ -107,7 +118,7 @@ export const useDeliveries = () => {
   // Update delivery status
   const updateStatus = useCallback(async (deliveryId: string, newStatus: string) => {
     if (!user?.sheetsUrl) {
-      throw new Error('No Google Sheets URL provided');
+      throw new Error('לא סופק קישור לגליון Google');
     }
 
     try {
@@ -143,7 +154,7 @@ export const useDeliveries = () => {
       return;
     } catch (err) {
       console.error('Error updating delivery status:', err);
-      throw new Error('Failed to update delivery status');
+      throw new Error('שגיאה בעדכון סטטוס המשלוח');
     }
   }, [user?.sheetsUrl, deliveries, isOnline, isTestData]);
 

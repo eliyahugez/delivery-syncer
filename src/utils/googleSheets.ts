@@ -32,12 +32,13 @@ export const getCSVExportUrl = (spreadsheetId: string, sheetId = 0): string => {
 
 // Generate test data for development/offline use
 const generateTestData = (): Delivery[] => {
+  const currentDate = new Date().toISOString();
   return [
     {
       id: '1',
       trackingNumber: 'GWD003912139',
-      scanDate: new Date().toISOString(),
-      statusDate: new Date().toISOString(),
+      scanDate: currentDate,
+      statusDate: currentDate,
       status: 'delivered',
       name: 'Caroline Spector',
       phone: '972528301402',
@@ -46,8 +47,8 @@ const generateTestData = (): Delivery[] => {
     {
       id: '2',
       trackingNumber: 'GWD003903250',
-      scanDate: new Date().toISOString(),
-      statusDate: new Date().toISOString(),
+      scanDate: currentDate,
+      statusDate: currentDate,
       status: 'delivered',
       name: 'Aryeh Feigin',
       phone: '972544820544',
@@ -55,13 +56,33 @@ const generateTestData = (): Delivery[] => {
     },
     {
       id: '3',
+      trackingNumber: 'GWD003912434',
+      scanDate: currentDate,
+      statusDate: currentDate,
+      status: 'delivered',
+      name: 'Ariel Urman',
+      phone: '524822305',
+      address: 'Karnei Shomron-Arnon 32'
+    },
+    {
+      id: '4',
       trackingNumber: 'TMU003444926',
-      scanDate: new Date().toISOString(),
-      statusDate: new Date().toISOString(),
-      status: 'pending',
+      scanDate: currentDate,
+      statusDate: currentDate,
+      status: 'delivered',
       name: 'אירנה רביץ',
       phone: '545772273',
       address: 'Karnei Shomron-יעלים 5 מעלה שומרון'
+    },
+    {
+      id: '5',
+      trackingNumber: 'TMU003377273',
+      scanDate: currentDate,
+      statusDate: currentDate,
+      status: 'delivered',
+      name: 'omri Rozenzewaig',
+      phone: '528322068',
+      address: 'Maale Shomron-דרגות 71'
     }
   ];
 };
@@ -108,6 +129,7 @@ export const fetchDeliveriesFromSheets = async (sheetsUrl: string): Promise<{ de
         // Quick validation to ensure it's actually CSV data
         if (!csvText.includes(',') || csvText.includes('<!DOCTYPE html>')) {
           console.log('Received HTML instead of CSV, trying next proxy');
+          console.log('Response preview:', csvText.substring(0, 200));
           csvText = null;
           proxyIndex++;
         }
@@ -119,11 +141,13 @@ export const fetchDeliveriesFromSheets = async (sheetsUrl: string): Promise<{ de
     
     if (csvText) {
       const parsedDeliveries = parseCSVToDeliveries(csvText);
-      return { deliveries: parsedDeliveries, isTestData: false };
+      if (parsedDeliveries.length > 0) {
+        return { deliveries: parsedDeliveries, isTestData: false };
+      }
     }
     
-    // If all proxies fail, fallback to test data
-    console.warn('All proxies failed, falling back to test data');
+    // If all proxies fail or parsing returns no results, fallback to test data
+    console.warn('All proxies failed or no data parsed, falling back to test data');
     return { deliveries: generateTestData(), isTestData: true };
     
   } catch (error) {
@@ -138,9 +162,16 @@ export const fetchDeliveriesFromSheets = async (sheetsUrl: string): Promise<{ de
 // Function to parse CSV data to Delivery objects
 export const parseCSVToDeliveries = (csvText: string): Delivery[] => {
   try {
+    console.log('Parsing CSV data...');
+    console.log('CSV preview:', csvText.substring(0, 500));
+    
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
+      transform: (value) => {
+        // Trim whitespace from values
+        return typeof value === 'string' ? value.trim() : value;
+      }
     });
     
     if (result.errors.length > 0) {
@@ -150,12 +181,12 @@ export const parseCSVToDeliveries = (csvText: string): Delivery[] => {
     // Map parsed data to Delivery objects
     return result.data.map((row: any, index) => {
       // Handle various column names for flexibility
-      const trackingField = findField(row, ['Tracking', 'trackingNumber', 'מספר מעקב', 'tracking']);
-      const scanDateField = findField(row, ['Date Scanned', 'scanDate', 'תאריך סריקה', 'scan date']);
-      const statusDateField = findField(row, ['Status date', 'statusDate', 'תאריך סטטוס', 'status date']);
+      const trackingField = findField(row, ['Tracking', 'trackingNumber', 'מספר מעקב', 'tracking', 'TrackingNumber']);
+      const scanDateField = findField(row, ['Date Scanned', 'scanDate', 'תאריך סריקה', 'scan date', 'DateScanned']);
+      const statusDateField = findField(row, ['Status date', 'statusDate', 'תאריך סטטוס', 'status date', 'StatusDate']);
       const statusField = findField(row, ['Status', 'status', 'סטטוס']);
       const nameField = findField(row, ['Name', 'name', 'שם']);
-      const phoneField = findField(row, ['Phone Number', 'phone', 'טלפון', 'Phone']);
+      const phoneField = findField(row, ['Phone Number', 'phone', 'טלפון', 'Phone', 'PhoneNumber']);
       const addressField = findField(row, ['Address', 'address', 'כתובת']);
       
       const trackingNumber = row[trackingField] || `delivery-${index}`;
@@ -165,6 +196,8 @@ export const parseCSVToDeliveries = (csvText: string): Delivery[] => {
       const name = row[nameField] || '';
       const phone = row[phoneField] || '';
       const address = row[addressField] || '';
+      
+      console.log(`Parsed delivery: ${trackingNumber}, status: ${status}, name: ${name}`);
       
       // Map Hebrew/English status text to our standard statuses
       status = normalizeStatus(status);
@@ -231,14 +264,12 @@ const normalizeStatus = (status: string): string => {
 };
 
 // Function to update a delivery status in Google Sheets (this is a mock function)
-// In a real implementation, you would use Google Sheets API or Apps Script
 export const updateDeliveryStatus = async (
   sheetsUrl: string, 
   deliveryId: string, 
   newStatus: string
 ): Promise<void> => {
   // This is a mock function that simulates updating Google Sheets
-  // In a real implementation, you would use Google Sheets API or a backend service
   console.log(`Updating delivery ${deliveryId} to status ${newStatus} in sheet ${sheetsUrl}`);
   
   // In a real application, you would:

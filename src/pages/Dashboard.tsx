@@ -8,12 +8,13 @@ import Header from '@/components/layout/Header';
 import DeliveryTable from '@/components/deliveries/DeliveryTable';
 import { useAuth } from '@/context/AuthContext';
 import { useDeliveries } from '@/hooks/useDeliveries';
-import { WifiOff, RefreshCw, AlertTriangle } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertTriangle, FileCsv, FileWarning } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 const Dashboard: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const { 
     deliveries, 
@@ -82,21 +83,53 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
           
+          {user?.sheetsUrl && (
+            <Alert variant="default" className="mb-4">
+              <FileCsv className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>מקור נתונים: {user.sheetsUrl.substring(0, 30)}...</span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={fetchDeliveries}
+                  className="h-7 text-xs"
+                >
+                  רענן נתונים
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          
           {isTestData && (
             <Alert variant="warning" className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
+              <FileWarning className="h-4 w-4" />
               <AlertDescription>
-                מוצגים נתוני דוגמה עקב מגבלות CORS. ייתכן שנדרש לעשות שיתוף פומבי לקובץ Google Sheets או להשתמש בפתרון שרת.
+                מוצגים נתוני דוגמה עקב מגבלות אבטחה. יש לוודא שגיליון ה-Google Sheets משותף לצפייה ציבורית.
               </AlertDescription>
             </Alert>
           )}
           
           {error ? (
-            <div className="glass p-6 rounded-xl text-center">
-              <h3 className="text-lg font-medium text-destructive mb-2">שגיאה בטעינת הנתונים</h3>
-              <p className="text-muted-foreground mb-4">{error}</p>
-              <Button onClick={fetchDeliveries}>נסה שוב</Button>
-            </div>
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle className="text-destructive">שגיאה בטעינת הנתונים</CardTitle>
+                <CardDescription>לא ניתן לטעון את נתוני המשלוחים מהשרת</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground mb-4">{error}</p>
+                <div className="bg-muted/50 p-4 rounded-md border text-sm mb-4">
+                  <h4 className="font-medium mb-2">עצות לפתרון:</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>ודא שהקישור לגיליון Google Sheets תקין</li>
+                    <li>ודא שהגיליון משותף להצגה ציבורית (לכל מי שיש את הקישור)</li>
+                    <li>ודא שיש לגיליון את העמודות הנדרשות: Tracking, Status, Name, Phone Number, Address</li>
+                  </ul>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button onClick={fetchDeliveries}>נסה שוב</Button>
+              </CardFooter>
+            </Card>
           ) : (
             <DeliveryTable 
               deliveries={deliveries} 

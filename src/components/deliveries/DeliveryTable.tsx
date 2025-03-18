@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { Delivery } from '@/types/delivery';
-import { Phone, CalendarClock, MapPin } from 'lucide-react';
+import { Phone, CalendarClock, MapPin, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -131,10 +132,13 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2">
                   <DeliveryStatusBadge status={delivery.status} />
-                  <span className="text-xs text-muted-foreground">#{delivery.trackingNumber}</span>
+                  <div className="flex items-center text-xs text-muted-foreground">
+                    <Package size={12} className="mr-1" />
+                    <span>{delivery.trackingNumber}</span>
+                  </div>
                 </div>
                 
-                <h3 className="font-medium truncate">{delivery.name}</h3>
+                <h3 className="font-medium truncate">{delivery.name || "לקוח ללא שם"}</h3>
                 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
@@ -146,7 +150,7 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                   
                   <div className="flex items-center gap-1">
                     <MapPin size={14} />
-                    <span className="truncate">{delivery.address}</span>
+                    <span className="truncate">{delivery.address || "כתובת לא זמינה"}</span>
                   </div>
                 </div>
               </div>
@@ -174,6 +178,7 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                   size="icon"
                   onClick={() => handlePhoneCall(delivery.phone)}
                   className="flex-shrink-0"
+                  disabled={!delivery.phone}
                 >
                   <Phone size={18} />
                 </Button>
