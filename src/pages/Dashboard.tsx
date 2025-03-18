@@ -11,6 +11,7 @@ import { WifiOff, RefreshCw, AlertTriangle, FileText, FileWarning } from 'lucide
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from '@/components/ui/use-toast';
 
 const Dashboard: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
@@ -79,6 +80,33 @@ const Dashboard: React.FC = () => {
                 <RefreshCw size={12} className="mr-1" />
                 עודכן {formatLastSync()}
               </span>
+              {!isOnline && (
+                <>
+                  <span className="mx-1">•</span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 px-2 text-xs"
+                    onClick={() => {
+                      if (navigator.onLine) {
+                        fetchDeliveries();
+                        toast({
+                          title: 'סנכרון ידני',
+                          description: 'מסנכרן נתונים עם Google Sheets...',
+                        });
+                      } else {
+                        toast({
+                          title: 'אין חיבור לאינטרנט',
+                          description: 'לא ניתן לסנכרן כרגע. נסה שוב כשתהיה מחובר לאינטרנט.',
+                          variant: 'destructive',
+                        });
+                      }
+                    }}
+                  >
+                    סנכרן ידנית
+                  </Button>
+                </>  
+              )}
             </div>
           </div>
           
@@ -130,11 +158,40 @@ const Dashboard: React.FC = () => {
               </CardFooter>
             </Card>
           ) : (
-            <DeliveryTable 
-              deliveries={deliveries} 
-              onUpdateStatus={updateStatus}
-              isLoading={isLoading}
-            />
+            <div className="space-y-4">
+              {isOnline && (
+                <div className="flex justify-end">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      toast({
+                        title: 'סנכרון נתונים',
+                        description: 'מסנכרן נתונים עם Google Sheets...',
+                      });
+                      fetchDeliveries();
+                    }}
+                    className="mb-2"
+                  >
+                    סנכרן נתונים עכשיו
+                  </Button>
+                </div>
+              )}
+              
+              <DeliveryTable 
+                deliveries={deliveries} 
+                onUpdateStatus={async (id, newStatus) => {
+                  try {
+                    await updateStatus(id, newStatus);
+                  } catch (error) {
+                    console.error("Error updating status:", error);
+                    throw error;
+                  }
+                }}
+                isLoading={isLoading}
+                sheetsUrl={user?.sheetsUrl}
+              />
+            </div>
           )}
         </motion.div>
       </div>

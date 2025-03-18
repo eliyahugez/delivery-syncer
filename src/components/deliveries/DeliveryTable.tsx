@@ -1,9 +1,8 @@
-
-import React, { useState } from 'react';
-import { useToast } from '@/components/ui/use-toast';
-import { Delivery } from '@/types/delivery';
-import { Phone, CalendarClock, MapPin, Package, User } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import React, { useState } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import { Delivery } from "@/types/delivery";
+import { Phone, CalendarClock, MapPin, Package, User, MessageCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -11,14 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import DeliveryStatusBadge from './DeliveryStatusBadge';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Badge } from '@/components/ui/badge';
+import DeliveryStatusBadge from "./DeliveryStatusBadge";
+import { motion, AnimatePresence } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
 
 interface DeliveryTableProps {
   deliveries: Delivery[];
   onUpdateStatus: (id: string, newStatus: string) => Promise<void>;
   isLoading: boolean;
+  sheetsUrl?: string; // Add this line to accept the sheetsUrl prop
 }
 
 const DeliveryTable: React.FC<DeliveryTableProps> = ({
@@ -29,22 +29,43 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
   const { toast } = useToast();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const handleStatusChange = async (id: string, newStatus: string) => {
-    setUpdatingId(id);
+  // Handle status change for a single delivery or a group of deliveries
+  const handleStatusChange = async (
+    id: string,
+    newStatus: string,
+    groupDeliveries?: Delivery[]
+  ) => {
+    // If we're updating a group, we'll update all deliveries in the group
+    const deliveriesToUpdate =
+      groupDeliveries || deliveries.filter((d) => d.id === id);
+    const deliveryIds = deliveriesToUpdate.map((d) => d.id);
+
+    // Set all deliveries in the group as updating
+    deliveryIds.forEach((id) => setUpdatingId(id));
+
     try {
-      await onUpdateStatus(id, newStatus);
+      // Update each delivery in the group
+      const updatePromises = deliveryIds.map((id) =>
+        onUpdateStatus(id, newStatus)
+      );
+      await Promise.all(updatePromises);
+
       toast({
-        title: 'סטטוס עודכן',
-        description: 'סטטוס המשלוח עודכן בהצלחה',
+        title: "סטטוס עודכן",
+        description:
+          deliveryIds.length > 1
+            ? `סטטוס ${deliveryIds.length} משלוחים עודכן בהצלחה`
+            : "סטטוס המשלוח עודכן בהצלחה",
       });
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error("Error updating status:", error);
       toast({
-        title: 'שגיאה בעדכון',
-        description: 'לא ניתן לעדכן את הסטטוס כרגע',
-        variant: 'destructive',
+        title: "שגיאה בעדכון",
+        description: "לא ניתן לעדכן את הסטטוס כרגע",
+        variant: "destructive",
       });
     } finally {
+      // Clear updating state for all deliveries in the group
       setUpdatingId(null);
     }
   };
@@ -52,39 +73,76 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
   const handlePhoneCall = (phone: string) => {
     if (!phone) {
       toast({
-        title: 'מספר טלפון חסר',
-        description: 'לא נמצא מספר טלפון למשלוח זה',
-        variant: 'destructive',
+        title: "מספר טלפון חסר",
+        description: "לא נמצא מספר טלפון למשלוח זה",
+        variant: "destructive",
       });
       return;
     }
-    
+
     // Format phone number
-    let formattedPhone = phone.replace(/\D/g, '');
-    if (!formattedPhone.startsWith('+')) {
+    let formattedPhone = phone.replace(/\D/g, "");
+    if (!formattedPhone.startsWith("+")) {
       // If the number starts with 972, assume it's already in international format
-      if (formattedPhone.startsWith('972')) {
+      if (formattedPhone.startsWith("972")) {
         formattedPhone = `+${formattedPhone}`;
       } else {
         // Otherwise assume it's Israeli and convert to international format
-        formattedPhone = `+972${formattedPhone.startsWith('0') ? formattedPhone.substring(1) : formattedPhone}`;
+        formattedPhone = `+972${
+          formattedPhone.startsWith("0")
+            ? formattedPhone.substring(1)
+            : formattedPhone
+        }`;
       }
     }
-    
+
     window.open(`tel:${formattedPhone}`);
   };
 
+  // Add WhatsApp message handler
+  const handleWhatsAppMessage = (phone: string) => {
+    if (!phone) {
+      toast({
+        title: "מספר טלפון חסר",
+        description: "לא נמצא מספר טלפון למשלוח זה",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Format phone number
+    let formattedPhone = phone.replace(/\D/g, "");
+    if (!formattedPhone.startsWith("+")) {
+      // If the number starts with 972, assume it's already in international format
+      if (formattedPhone.startsWith("972")) {
+        formattedPhone = formattedPhone;
+      } else {
+        // Otherwise assume it's Israeli and convert to international format
+        formattedPhone = `972${
+          formattedPhone.startsWith("0")
+            ? formattedPhone.substring(1)
+            : formattedPhone
+        }`;
+      }
+    }
+
+    // Create WhatsApp link with predefined message
+    const message = "היי זה שליח";
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
   const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    
+    if (!dateString) return "";
+
     try {
       const date = new Date(dateString);
-      return new Intl.DateTimeFormat('he-IL', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
+      return new Intl.DateTimeFormat("he-IL", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
       }).format(date);
     } catch (e) {
       return dateString;
@@ -92,16 +150,17 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
   };
 
   const statusOptions = [
-    { value: 'pending', label: 'ממתין' },
-    { value: 'in_progress', label: 'בדרך' },
-    { value: 'delivered', label: 'נמסר' },
-    { value: 'failed', label: 'נכשל' },
-    { value: 'returned', label: 'הוחזר' },
+    { value: "pending", label: "ממתין" },
+    { value: "in_progress", label: "בדרך" },
+    { value: "delivered", label: "נמסר" },
+    { value: "failed", label: "נכשל" },
+    { value: "returned", label: "הוחזר" },
   ];
 
-  // Group deliveries by assignedTo if available
+  // Group deliveries by customer name
   const groupedDeliveries = deliveries.reduce((acc, delivery) => {
-    const group = delivery.assignedTo || 'לא משויך';
+    // Use customer name as the grouping key, fallback to 'לא משויך' if name is empty
+    const group = delivery.name ? delivery.name.trim() : "לא משויך";
     if (!acc[group]) {
       acc[group] = [];
     }
@@ -140,75 +199,114 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                 {groupDeliveries.length} משלוחים
               </Badge>
             </div>
-            
+
             <AnimatePresence>
-              {groupDeliveries.map((delivery, index) => (
-                <motion.div
-                  key={delivery.id || index}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                  className="glass p-4 rounded-xl"
-                >
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <DeliveryStatusBadge status={delivery.status} />
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <Package size={12} className="mr-1" />
-                          <span>{delivery.trackingNumber}</span>
-                        </div>
-                      </div>
-                      
-                      <h3 className="font-medium truncate">{delivery.name || "לקוח ללא שם"}</h3>
-                      
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <CalendarClock size={14} />
-                          <span>{formatDate(delivery.statusDate)}</span>
-                        </div>
-                        
-                        <div className="hidden sm:block text-muted-foreground">•</div>
-                        
-                        <div className="flex items-center gap-1">
-                          <MapPin size={14} />
-                          <span className="truncate">{delivery.address || "כתובת לא זמינה"}</span>
-                        </div>
+              <motion.div
+                key={group}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3 }}
+                className="glass p-4 rounded-xl"
+              >
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      {/* Use the status of the first delivery in the group */}
+                      <DeliveryStatusBadge status={groupDeliveries[0].status} />
+                      <div className="flex items-center text-xs text-muted-foreground">
+                        <Package size={12} className="mr-1" />
+                        <span className="font-medium">
+                          {groupDeliveries.length} משלוחים
+                        </span>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-2 self-end md:self-center w-full md:w-auto">
-                      <Select
-                        onValueChange={(value) => handleStatusChange(delivery.id, value)}
-                        defaultValue={delivery.status}
-                        disabled={updatingId === delivery.id}
-                      >
-                        <SelectTrigger className="w-[120px]">
-                          <SelectValue placeholder="סטטוס" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handlePhoneCall(delivery.phone)}
-                        className="flex-shrink-0"
-                        disabled={!delivery.phone}
-                      >
-                        <Phone size={18} />
-                      </Button>
+
+                    <h3 className="font-medium truncate">
+                      {group || "לקוח ללא שם"}
+                    </h3>
+
+                    {/* Display all tracking numbers */}
+                    <div className="flex flex-wrap gap-1 mt-1 mb-2">
+                      {groupDeliveries.map((delivery, idx) => (
+                        <Badge
+                          key={delivery.id}
+                          variant="outline"
+                          className="text-xs"
+                        >
+                          {delivery.trackingNumber}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <CalendarClock size={14} />
+                        <span>{formatDate(groupDeliveries[0].statusDate)}</span>
+                      </div>
+
+                      <div className="hidden sm:block text-muted-foreground">
+                        •
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <MapPin size={14} />
+                        <span className="truncate">
+                          {groupDeliveries[0].address || "כתובת לא זמינה"}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </motion.div>
-              ))}
+
+                  <div className="flex items-center gap-2 self-end md:self-center w-full md:w-auto">
+                    <Select
+                      onValueChange={(value) =>
+                        handleStatusChange(
+                          groupDeliveries[0].id,
+                          value,
+                          groupDeliveries
+                        )
+                      }
+                      defaultValue={groupDeliveries[0].status}
+                      disabled={groupDeliveries.some(
+                        (d) => updatingId === d.id
+                      )}
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="סטטוס" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handlePhoneCall(groupDeliveries[0].phone)}
+                      className="flex-shrink-0"
+                      disabled={!groupDeliveries[0].phone}
+                    >
+                      <Phone size={18} />
+                    </Button>
+                    
+                    {/* Add WhatsApp button */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleWhatsAppMessage(groupDeliveries[0].phone)}
+                      className="flex-shrink-0 bg-green-50 hover:bg-green-100 text-green-600 border-green-200"
+                      disabled={!groupDeliveries[0].phone}
+                    >
+                      <MessageCircle size={18} />
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
             </AnimatePresence>
           </div>
         ))}
@@ -238,27 +336,33 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                     <span>{delivery.trackingNumber}</span>
                   </div>
                 </div>
-                
-                <h3 className="font-medium truncate">{delivery.name || "לקוח ללא שם"}</h3>
-                
+
+                <h3 className="font-medium truncate">
+                  {delivery.name || "לקוח ללא שם"}
+                </h3>
+
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <CalendarClock size={14} />
                     <span>{formatDate(delivery.statusDate)}</span>
                   </div>
-                  
+
                   <div className="hidden sm:block text-muted-foreground">•</div>
-                  
+
                   <div className="flex items-center gap-1">
                     <MapPin size={14} />
-                    <span className="truncate">{delivery.address || "כתובת לא זמינה"}</span>
+                    <span className="truncate">
+                      {delivery.address || "כתובת לא זמינה"}
+                    </span>
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-2 self-end md:self-center w-full md:w-auto">
                 <Select
-                  onValueChange={(value) => handleStatusChange(delivery.id, value)}
+                  onValueChange={(value) =>
+                    handleStatusChange(delivery.id, value)
+                  }
                   defaultValue={delivery.status}
                   disabled={updatingId === delivery.id}
                 >
@@ -273,7 +377,7 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                     ))}
                   </SelectContent>
                 </Select>
-                
+
                 <Button
                   variant="outline"
                   size="icon"
@@ -282,6 +386,17 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                   disabled={!delivery.phone}
                 >
                   <Phone size={18} />
+                </Button>
+                
+                {/* Add WhatsApp button */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleWhatsAppMessage(delivery.phone)}
+                  className="flex-shrink-0 bg-green-50 hover:bg-green-100 text-green-600 border-green-200"
+                  disabled={!delivery.phone}
+                >
+                  <MessageCircle size={18} />
                 </Button>
               </div>
             </div>
