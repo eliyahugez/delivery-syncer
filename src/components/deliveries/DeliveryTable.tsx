@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { Delivery } from '@/types/delivery';
@@ -61,7 +60,13 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
     // Format phone number
     let formattedPhone = phone.replace(/\D/g, '');
     if (!formattedPhone.startsWith('+')) {
-      formattedPhone = `+972${formattedPhone.startsWith('0') ? formattedPhone.substring(1) : formattedPhone}`;
+      // If the number starts with 972, assume it's already in international format
+      if (formattedPhone.startsWith('972')) {
+        formattedPhone = `+${formattedPhone}`;
+      } else {
+        // Otherwise assume it's Israeli and convert to international format
+        formattedPhone = `+972${formattedPhone.startsWith('0') ? formattedPhone.substring(1) : formattedPhone}`;
+      }
     }
     
     window.open(`tel:${formattedPhone}`);

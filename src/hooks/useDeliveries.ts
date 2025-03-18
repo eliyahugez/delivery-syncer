@@ -55,17 +55,14 @@ export const useDeliveries = () => {
 
     setIsLoading(true);
     setError(null);
-    setIsTestData(false);
 
     try {
       console.log('Fetching deliveries from Google Sheets...');
-      const fetchedDeliveries = await fetchDeliveriesFromSheets(user.sheetsUrl);
+      const { deliveries: fetchedDeliveries, isTestData: usingTestData } = await fetchDeliveriesFromSheets(user.sheetsUrl);
+      setIsTestData(usingTestData);
       
-      // Check if we got test data
-      if (fetchedDeliveries.length > 0 && fetchedDeliveries[0].id === '1' && 
-          fetchedDeliveries[0].trackingNumber === 'TRK12345') {
+      if (usingTestData) {
         console.log('Using test data due to CORS issues');
-        setIsTestData(true);
         toast({
           title: 'שימוש בנתוני דוגמה',
           description: 'לא ניתן להתחבר ישירות לקובץ Google Sheets עקב מגבלות אבטחה. מוצגים נתוני דוגמה.',

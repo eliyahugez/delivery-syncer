@@ -19,8 +19,15 @@ export const getCSVExportUrl = (spreadsheetId: string, sheetId = 0): string => {
   // First create the direct Google Sheets export URL
   const directUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${sheetId}`;
   
-  // Use CORS proxy (cors-anywhere alternative)
-  return `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
+  // Use multiple CORS proxies for fallback
+  const corsProxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+    `https://cors-anywhere.herokuapp.com/${directUrl}`
+  ];
+  
+  // Return the first proxy in the list (we'll try them in sequence if needed)
+  return corsProxies[0];
 };
 
 // Generate test data for development/offline use
@@ -28,39 +35,39 @@ const generateTestData = (): Delivery[] => {
   return [
     {
       id: '1',
-      trackingNumber: 'TRK12345',
-      scanDate: new Date().toISOString(),
-      statusDate: new Date().toISOString(),
-      status: 'pending',
-      name: 'דוד ישראלי',
-      phone: '0501234567',
-      address: 'רחוב הרצל 10, תל אביב'
-    },
-    {
-      id: '2',
-      trackingNumber: 'TRK67890',
-      scanDate: new Date().toISOString(),
-      statusDate: new Date().toISOString(),
-      status: 'in_progress',
-      name: 'שרה כהן',
-      phone: '0527654321',
-      address: 'שדרות רוטשילד 15, תל אביב'
-    },
-    {
-      id: '3',
-      trackingNumber: 'TRK24680',
+      trackingNumber: 'GWD003912139',
       scanDate: new Date().toISOString(),
       statusDate: new Date().toISOString(),
       status: 'delivered',
-      name: 'יוסי לוי',
-      phone: '0537894561',
-      address: 'רחוב אלנבי 20, תל אביב'
+      name: 'Caroline Spector',
+      phone: '972528301402',
+      address: 'D. N. Lev Hashomron-Maale Shomron 48'
+    },
+    {
+      id: '2',
+      trackingNumber: 'GWD003903250',
+      scanDate: new Date().toISOString(),
+      statusDate: new Date().toISOString(),
+      status: 'delivered',
+      name: 'Aryeh Feigin',
+      phone: '972544820544',
+      address: 'Maale Shomron-18 Arnon Street'
+    },
+    {
+      id: '3',
+      trackingNumber: 'TMU003444926',
+      scanDate: new Date().toISOString(),
+      statusDate: new Date().toISOString(),
+      status: 'pending',
+      name: 'אירנה רביץ',
+      phone: '545772273',
+      address: 'Karnei Shomron-יעלים 5 מעלה שומרון'
     }
   ];
 };
 
 // Function to fetch deliveries from Google Sheets
-export const fetchDeliveriesFromSheets = async (sheetsUrl: string): Promise<Delivery[]> => {
+export const fetchDeliveriesFromSheets = async (sheetsUrl: string): Promise<{ deliveries: Delivery[], isTestData: boolean }> => {
   try {
     console.log('Fetching from Google Sheets URL:', sheetsUrl);
     
@@ -70,38 +77,61 @@ export const fetchDeliveriesFromSheets = async (sheetsUrl: string): Promise<Deli
       throw new Error('Invalid Google Sheets URL');
     }
 
-    // Try with CORS proxy first
-    try {
-      const csvUrl = getCSVExportUrl(spreadsheetId);
-      console.log('Attempting to fetch from:', csvUrl);
-      
-      const response = await fetch(csvUrl, {
-        method: 'GET',
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'text/csv',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch data: ${response.status} ${response.statusText}`);
+    // Try with CORS proxy
+    let csvText: string | null = null;
+    let proxyIndex = 0;
+    const corsProxies = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=0`)}`,
+      `https://corsproxy.io/?${encodeURIComponent(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=0`)}`,
+      `https://cors-anywhere.herokuapp.com/https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=0`
+    ];
+    
+    while (proxyIndex < corsProxies.length && !csvText) {
+      const corsUrl = corsProxies[proxyIndex];
+      try {
+        console.log(`Attempting to fetch from proxy ${proxyIndex + 1}:`, corsUrl);
+        
+        const response = await fetch(corsUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'text/csv',
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch data: ${response.status} ${response.statusText}`);
+        }
+        
+        csvText = await response.text();
+        console.log('Successfully fetched CSV data');
+        
+        // Quick validation to ensure it's actually CSV data
+        if (!csvText.includes(',') || csvText.includes('<!DOCTYPE html>')) {
+          console.log('Received HTML instead of CSV, trying next proxy');
+          csvText = null;
+          proxyIndex++;
+        }
+      } catch (err) {
+        console.error(`Proxy ${proxyIndex + 1} attempt failed:`, err);
+        proxyIndex++;
       }
-      
-      const csvText = await response.text();
-      return parseCSVToDeliveries(csvText);
-    } catch (corsError) {
-      console.error('CORS proxy attempt failed:', corsError);
-      
-      // If CORS proxy fails, we'll fallback to test data if in development
-      console.warn('Falling back to test data due to CORS issues');
-      return generateTestData();
     }
+    
+    if (csvText) {
+      const parsedDeliveries = parseCSVToDeliveries(csvText);
+      return { deliveries: parsedDeliveries, isTestData: false };
+    }
+    
+    // If all proxies fail, fallback to test data
+    console.warn('All proxies failed, falling back to test data');
+    return { deliveries: generateTestData(), isTestData: true };
+    
   } catch (error) {
     console.error('Error fetching from Google Sheets:', error);
     
     // Return test data as fallback
     console.warn('Returning test data due to fetch error');
-    return generateTestData();
+    return { deliveries: generateTestData(), isTestData: true };
   }
 };
 
@@ -119,18 +149,28 @@ export const parseCSVToDeliveries = (csvText: string): Delivery[] => {
     
     // Map parsed data to Delivery objects
     return result.data.map((row: any, index) => {
-      // Try to find appropriate column names in both Hebrew and English
-      const id = row['מזהה'] || row['ID'] || row['id'] || `delivery-${index}`;
-      const trackingNumber = row['מספר מעקב'] || row['tracking'] || row['Tracking Number'] || '';
-      const scanDate = row['תאריך סריקה'] || row['scan date'] || row['Scan Date'] || '';
-      const statusDate = row['תאריך סטטוס'] || row['status date'] || row['Status Date'] || '';
-      const status = row['סטטוס'] || row['status'] || row['Status'] || 'pending';
-      const name = row['שם'] || row['name'] || row['Name'] || '';
-      const phone = row['טלפון'] || row['phone'] || row['Phone'] || '';
-      const address = row['כתובת'] || row['address'] || row['Address'] || '';
+      // Handle various column names for flexibility
+      const trackingField = findField(row, ['Tracking', 'trackingNumber', 'מספר מעקב', 'tracking']);
+      const scanDateField = findField(row, ['Date Scanned', 'scanDate', 'תאריך סריקה', 'scan date']);
+      const statusDateField = findField(row, ['Status date', 'statusDate', 'תאריך סטטוס', 'status date']);
+      const statusField = findField(row, ['Status', 'status', 'סטטוס']);
+      const nameField = findField(row, ['Name', 'name', 'שם']);
+      const phoneField = findField(row, ['Phone Number', 'phone', 'טלפון', 'Phone']);
+      const addressField = findField(row, ['Address', 'address', 'כתובת']);
+      
+      const trackingNumber = row[trackingField] || `delivery-${index}`;
+      const scanDate = row[scanDateField] || new Date().toISOString();
+      const statusDate = row[statusDateField] || new Date().toISOString();
+      let status = row[statusField] || 'pending';
+      const name = row[nameField] || '';
+      const phone = row[phoneField] || '';
+      const address = row[addressField] || '';
+      
+      // Map Hebrew/English status text to our standard statuses
+      status = normalizeStatus(status);
       
       return {
-        id,
+        id: index.toString(),
         trackingNumber,
         scanDate,
         statusDate,
@@ -144,6 +184,50 @@ export const parseCSVToDeliveries = (csvText: string): Delivery[] => {
     console.error('Error parsing CSV:', error);
     return [];
   }
+};
+
+// Helper function to find a matching field in the row
+const findField = (row: any, possibleNames: string[]): string => {
+  for (const name of possibleNames) {
+    if (row.hasOwnProperty(name)) {
+      return name;
+    }
+  }
+  
+  // Try case-insensitive match as fallback
+  const rowKeys = Object.keys(row);
+  for (const name of possibleNames) {
+    const lowerName = name.toLowerCase();
+    const match = rowKeys.find(key => key.toLowerCase() === lowerName);
+    if (match) {
+      return match;
+    }
+  }
+  
+  return '';
+};
+
+// Helper function to normalize status values
+const normalizeStatus = (status: string): string => {
+  const statusLower = status.toLowerCase();
+  
+  if (statusLower.includes('delivered') || statusLower.includes('נמסר')) {
+    return 'delivered';
+  }
+  if (statusLower.includes('pending') || statusLower.includes('ממתין')) {
+    return 'pending';
+  }
+  if (statusLower.includes('in_progress') || statusLower.includes('בדרך') || statusLower.includes('out for delivery') || statusLower.includes('בדרך למסירה')) {
+    return 'in_progress';
+  }
+  if (statusLower.includes('failed') || statusLower.includes('נכשל') || statusLower.includes('customer not answer') || statusLower.includes('לקוח לא ענה')) {
+    return 'failed';
+  }
+  if (statusLower.includes('return') || statusLower.includes('חבילה חזרה')) {
+    return 'returned';
+  }
+  
+  return 'pending';
 };
 
 // Function to update a delivery status in Google Sheets (this is a mock function)
