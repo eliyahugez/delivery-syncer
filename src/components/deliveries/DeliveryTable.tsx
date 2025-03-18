@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { Delivery } from '@/types/delivery';
-import { Phone, CalendarClock, MapPin, Package } from 'lucide-react';
+import { Phone, CalendarClock, MapPin, Package, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import DeliveryStatusBadge from './DeliveryStatusBadge';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Badge } from '@/components/ui/badge';
 
 interface DeliveryTableProps {
   deliveries: Delivery[];
@@ -98,6 +99,16 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
     { value: 'returned', label: 'הוחזר' },
   ];
 
+  // Group deliveries by assignedTo if available
+  const groupedDeliveries = deliveries.reduce((acc, delivery) => {
+    const group = delivery.assignedTo || 'לא משויך';
+    if (!acc[group]) {
+      acc[group] = [];
+    }
+    acc[group].push(delivery);
+    return acc;
+  }, {} as Record<string, Delivery[]>);
+
   if (isLoading) {
     return (
       <div className="glass p-8 rounded-xl flex flex-col items-center justify-center min-h-[300px]">
@@ -116,6 +127,96 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
     );
   }
 
+  // If we have grouped deliveries, display them in sections
+  if (Object.keys(groupedDeliveries).length > 1) {
+    return (
+      <div className="space-y-6">
+        {Object.entries(groupedDeliveries).map(([group, groupDeliveries]) => (
+          <div key={group} className="space-y-4">
+            <div className="flex items-center gap-2">
+              <User size={16} />
+              <h3 className="text-lg font-medium">{group}</h3>
+              <Badge variant="outline" className="ml-2">
+                {groupDeliveries.length} משלוחים
+              </Badge>
+            </div>
+            
+            <AnimatePresence>
+              {groupDeliveries.map((delivery, index) => (
+                <motion.div
+                  key={delivery.id || index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                  className="glass p-4 rounded-xl"
+                >
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <DeliveryStatusBadge status={delivery.status} />
+                        <div className="flex items-center text-xs text-muted-foreground">
+                          <Package size={12} className="mr-1" />
+                          <span>{delivery.trackingNumber}</span>
+                        </div>
+                      </div>
+                      
+                      <h3 className="font-medium truncate">{delivery.name || "לקוח ללא שם"}</h3>
+                      
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <CalendarClock size={14} />
+                          <span>{formatDate(delivery.statusDate)}</span>
+                        </div>
+                        
+                        <div className="hidden sm:block text-muted-foreground">•</div>
+                        
+                        <div className="flex items-center gap-1">
+                          <MapPin size={14} />
+                          <span className="truncate">{delivery.address || "כתובת לא זמינה"}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 self-end md:self-center w-full md:w-auto">
+                      <Select
+                        onValueChange={(value) => handleStatusChange(delivery.id, value)}
+                        defaultValue={delivery.status}
+                        disabled={updatingId === delivery.id}
+                      >
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue placeholder="סטטוס" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handlePhoneCall(delivery.phone)}
+                        className="flex-shrink-0"
+                        disabled={!delivery.phone}
+                      >
+                        <Phone size={18} />
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Fallback to the standard display if there's no grouping
   return (
     <div className="space-y-4">
       <AnimatePresence>

@@ -68,7 +68,7 @@ export const useDeliveries = () => {
         toast({
           title: 'שימוש בנתוני דוגמה',
           description: 'לא ניתן להתחבר ישירות לקובץ Google Sheets. ודא שהקובץ משותף לצפייה ציבורית או השתמש בקישור לתצוגה.',
-          variant: 'warning',
+          variant: 'destructive',
         });
       }
       

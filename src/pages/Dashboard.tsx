@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -8,7 +7,7 @@ import Header from '@/components/layout/Header';
 import DeliveryTable from '@/components/deliveries/DeliveryTable';
 import { useAuth } from '@/context/AuthContext';
 import { useDeliveries } from '@/hooks/useDeliveries';
-import { WifiOff, RefreshCw, AlertTriangle, FileCsv, FileWarning } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertTriangle, FileText, FileWarning } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -85,7 +84,7 @@ const Dashboard: React.FC = () => {
           
           {user?.sheetsUrl && (
             <Alert variant="default" className="mb-4">
-              <FileCsv className="h-4 w-4" />
+              <FileText className="h-4 w-4" />
               <AlertDescription className="flex items-center justify-between">
                 <span>מקור נתונים: {user.sheetsUrl.substring(0, 30)}...</span>
                 <Button 

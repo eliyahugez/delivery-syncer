@@ -42,7 +42,8 @@ const generateTestData = (): Delivery[] => {
       status: 'delivered',
       name: 'Caroline Spector',
       phone: '972528301402',
-      address: 'D. N. Lev Hashomron-Maale Shomron 48'
+      address: 'D. N. Lev Hashomron-Maale Shomron 48',
+      assignedTo: 'שליח 1'
     },
     {
       id: '2',
@@ -52,7 +53,8 @@ const generateTestData = (): Delivery[] => {
       status: 'delivered',
       name: 'Aryeh Feigin',
       phone: '972544820544',
-      address: 'Maale Shomron-18 Arnon Street'
+      address: 'Maale Shomron-18 Arnon Street',
+      assignedTo: 'שליח 1'
     },
     {
       id: '3',
@@ -62,7 +64,8 @@ const generateTestData = (): Delivery[] => {
       status: 'delivered',
       name: 'Ariel Urman',
       phone: '524822305',
-      address: 'Karnei Shomron-Arnon 32'
+      address: 'Karnei Shomron-Arnon 32',
+      assignedTo: 'שליח 2'
     },
     {
       id: '4',
@@ -72,7 +75,8 @@ const generateTestData = (): Delivery[] => {
       status: 'delivered',
       name: 'אירנה רביץ',
       phone: '545772273',
-      address: 'Karnei Shomron-יעלים 5 מעלה שומרון'
+      address: 'Karnei Shomron-יעלים 5 מעלה שומרון',
+      assignedTo: 'שליח 2'
     },
     {
       id: '5',
@@ -80,9 +84,10 @@ const generateTestData = (): Delivery[] => {
       scanDate: currentDate,
       statusDate: currentDate,
       status: 'delivered',
-      name: 'omri Rozenzewaig',
-      phone: '528322068',
-      address: 'Maale Shomron-דרגות 71'
+      name: '',  // Empty name to demonstrate fallback
+      phone: '',  // Empty phone to demonstrate fallback
+      address: '', // Empty address to demonstrate fallback
+      assignedTo: 'שליח 3'
     }
   ];
 };
@@ -165,45 +170,58 @@ export const parseCSVToDeliveries = (csvText: string): Delivery[] => {
     console.log('Parsing CSV data...');
     console.log('CSV preview:', csvText.substring(0, 500));
     
+    // Configure PapaParse with helpful error handling options
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
       transform: (value) => {
         // Trim whitespace from values
         return typeof value === 'string' ? value.trim() : value;
-      }
+      },
+      transformHeader: (header) => {
+        // Clean header names to help with matching
+        return header.trim();
+      },
+      // Add delimiter detect as a failsafe
+      delimiter: "",  // auto-detect
     });
     
     if (result.errors.length > 0) {
       console.error('CSV parsing errors:', result.errors);
+      // Continue anyway, we'll try to salvage what we can
     }
+    
+    // Log the headers we found to help with debugging
+    console.log('Found CSV headers:', result.meta.fields);
     
     // Map parsed data to Delivery objects
     return result.data.map((row: any, index) => {
       // Handle various column names for flexibility
-      const trackingField = findField(row, ['Tracking', 'trackingNumber', 'מספר מעקב', 'tracking', 'TrackingNumber']);
-      const scanDateField = findField(row, ['Date Scanned', 'scanDate', 'תאריך סריקה', 'scan date', 'DateScanned']);
+      const trackingField = findField(row, ['Tracking', 'trackingNumber', 'מספר מעקב', 'tracking', 'TrackingNumber', 'מספר משלוח', 'מספר הזמנה']);
+      const scanDateField = findField(row, ['Date Scanned', 'scanDate', 'תאריך סריקה', 'scan date', 'DateScanned', 'תאריך']);
       const statusDateField = findField(row, ['Status date', 'statusDate', 'תאריך סטטוס', 'status date', 'StatusDate']);
-      const statusField = findField(row, ['Status', 'status', 'סטטוס']);
-      const nameField = findField(row, ['Name', 'name', 'שם']);
-      const phoneField = findField(row, ['Phone Number', 'phone', 'טלפון', 'Phone', 'PhoneNumber']);
-      const addressField = findField(row, ['Address', 'address', 'כתובת']);
+      const statusField = findField(row, ['Status', 'status', 'סטטוס', 'מצב']);
+      const nameField = findField(row, ['Name', 'name', 'שם', 'שם לקוח', 'Customer Name']);
+      const phoneField = findField(row, ['Phone Number', 'phone', 'טלפון', 'Phone', 'PhoneNumber', 'מספר טלפון', 'נייד']);
+      const addressField = findField(row, ['Address', 'address', 'כתובת', 'כתובת למשלוח', 'Shipping Address']);
+      const assignedToField = findField(row, ['Assigned To', 'assignedTo', 'שליח', 'Courier', 'שייך ל', 'delivery person']);
       
       const trackingNumber = row[trackingField] || `delivery-${index}`;
       const scanDate = row[scanDateField] || new Date().toISOString();
-      const statusDate = row[statusDateField] || new Date().toISOString();
+      const statusDate = row[statusDateField] || scanDate || new Date().toISOString();
       let status = row[statusField] || 'pending';
       const name = row[nameField] || '';
       const phone = row[phoneField] || '';
       const address = row[addressField] || '';
+      const assignedTo = row[assignedToField] || '';
       
-      console.log(`Parsed delivery: ${trackingNumber}, status: ${status}, name: ${name}`);
+      console.log(`Parsed delivery: ${trackingNumber}, status: ${status}, name: ${name || 'No name'}`);
       
       // Map Hebrew/English status text to our standard statuses
       status = normalizeStatus(status);
       
       return {
-        id: index.toString(),
+        id: trackingNumber + '-' + index.toString(),
         trackingNumber,
         scanDate,
         statusDate,
@@ -211,6 +229,7 @@ export const parseCSVToDeliveries = (csvText: string): Delivery[] => {
         name,
         phone,
         address,
+        assignedTo
       };
     });
   } catch (error) {
@@ -219,8 +238,9 @@ export const parseCSVToDeliveries = (csvText: string): Delivery[] => {
   }
 };
 
-// Helper function to find a matching field in the row
+// Helper function to find a matching field in the row with more flexibility
 const findField = (row: any, possibleNames: string[]): string => {
+  // First try exact match
   for (const name of possibleNames) {
     if (row.hasOwnProperty(name)) {
       return name;
@@ -237,6 +257,18 @@ const findField = (row: any, possibleNames: string[]): string => {
     }
   }
   
+  // Try partial match as a last resort
+  for (const name of possibleNames) {
+    const lowerName = name.toLowerCase();
+    const partialMatch = rowKeys.find(key => 
+      key.toLowerCase().includes(lowerName) || 
+      lowerName.includes(key.toLowerCase())
+    );
+    if (partialMatch) {
+      return partialMatch;
+    }
+  }
+  
   return '';
 };
 
@@ -244,19 +276,39 @@ const findField = (row: any, possibleNames: string[]): string => {
 const normalizeStatus = (status: string): string => {
   const statusLower = status.toLowerCase();
   
-  if (statusLower.includes('delivered') || statusLower.includes('נמסר')) {
+  if (statusLower.includes('delivered') || 
+      statusLower.includes('נמסר') ||
+      statusLower.includes('completed') ||
+      statusLower.includes('הושלם')) {
     return 'delivered';
   }
-  if (statusLower.includes('pending') || statusLower.includes('ממתין')) {
+  if (statusLower.includes('pending') || 
+      statusLower.includes('ממתין') ||
+      statusLower.includes('waiting') ||
+      statusLower.includes('new') ||
+      statusLower.includes('חדש')) {
     return 'pending';
   }
-  if (statusLower.includes('in_progress') || statusLower.includes('בדרך') || statusLower.includes('out for delivery') || statusLower.includes('בדרך למסירה')) {
+  if (statusLower.includes('in_progress') || 
+      statusLower.includes('בדרך') ||
+      statusLower.includes('out for delivery') || 
+      statusLower.includes('בדרך למסירה') ||
+      statusLower.includes('delivery in progress') ||
+      statusLower.includes('בתהליך')) {
     return 'in_progress';
   }
-  if (statusLower.includes('failed') || statusLower.includes('נכשל') || statusLower.includes('customer not answer') || statusLower.includes('לקוח לא ענה')) {
+  if (statusLower.includes('failed') || 
+      statusLower.includes('נכשל') || 
+      statusLower.includes('customer not answer') || 
+      statusLower.includes('לקוח לא ענה') ||
+      statusLower.includes('problem') ||
+      statusLower.includes('בעיה')) {
     return 'failed';
   }
-  if (statusLower.includes('return') || statusLower.includes('חבילה חזרה')) {
+  if (statusLower.includes('return') || 
+      statusLower.includes('חבילה חזרה') ||
+      statusLower.includes('החזרה') ||
+      statusLower.includes('הוחזר')) {
     return 'returned';
   }
   
