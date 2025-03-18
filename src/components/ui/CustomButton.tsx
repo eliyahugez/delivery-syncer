@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Button, ButtonProps } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const customButtonVariants = cva(
@@ -26,12 +26,19 @@ const customButtonVariants = cva(
   }
 );
 
-export interface CustomButtonProps
-  extends ButtonProps,
-    VariantProps<typeof customButtonVariants> {}
+// Create a type for our custom variants
+export type CustomButtonVariant = 'glass' | 'neo';
+
+// Define the props for our custom button
+export interface CustomButtonProps 
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'size'>,
+    VariantProps<typeof customButtonVariants> {
+  asChild?: boolean;
+}
 
 const CustomButton = React.forwardRef<HTMLButtonElement, CustomButtonProps>(
   ({ className, variant, size, ...props }, ref) => {
+    // Check if we're using one of our custom variants
     if (variant === 'glass' || variant === 'neo') {
       return (
         <button
@@ -43,10 +50,19 @@ const CustomButton = React.forwardRef<HTMLButtonElement, CustomButtonProps>(
     }
     
     // Fall back to the default Button component for other variants
-    return <Button className={className} variant={variant} size={size} ref={ref} {...props} />;
+    return (
+      <Button 
+        className={className} 
+        // Type assertion to work around type incompatibility
+        variant={variant as any} 
+        size={size as any} 
+        ref={ref} 
+        {...props} 
+      />
+    );
   }
 );
 
 CustomButton.displayName = 'CustomButton';
 
-export { CustomButton };
+export { CustomButton, customButtonVariants };
