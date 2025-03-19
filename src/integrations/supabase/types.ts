@@ -9,7 +9,107 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      column_mappings: {
+        Row: {
+          created_at: string | null
+          id: string
+          mappings: Json
+          sheet_url: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          mappings: Json
+          sheet_url: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          mappings?: Json
+          sheet_url?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      deliveries: {
+        Row: {
+          address: string | null
+          assigned_to: string | null
+          created_at: string | null
+          id: string
+          name: string | null
+          phone: string | null
+          scan_date: string | null
+          status: string
+          status_date: string | null
+          tracking_number: string
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          assigned_to?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          scan_date?: string | null
+          status?: string
+          status_date?: string | null
+          tracking_number: string
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          assigned_to?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          scan_date?: string | null
+          status?: string
+          status_date?: string | null
+          tracking_number?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      delivery_history: {
+        Row: {
+          courier: string | null
+          delivery_id: string | null
+          id: string
+          note: string | null
+          status: string
+          timestamp: string | null
+        }
+        Insert: {
+          courier?: string | null
+          delivery_id?: string | null
+          id?: string
+          note?: string | null
+          status: string
+          timestamp?: string | null
+        }
+        Update: {
+          courier?: string | null
+          delivery_id?: string | null
+          id?: string
+          note?: string | null
+          status?: string
+          timestamp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_history_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

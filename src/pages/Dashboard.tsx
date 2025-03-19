@@ -8,7 +8,7 @@ import Header from '@/components/layout/Header';
 import DeliveryTable from '@/components/deliveries/DeliveryTable';
 import { useAuth } from '@/context/AuthContext';
 import { useDeliveries } from '@/hooks/useDeliveries';
-import { WifiOff, RefreshCw, AlertTriangle, FileText, FileWarning, Users } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertTriangle, FileText, FileWarning, Users, Database, CloudSync } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +27,10 @@ const Dashboard: React.FC = () => {
     updateStatus,
     isOnline,
     lastSyncTime,
-    isTestData
+    isTestData,
+    pendingUpdates,
+    syncDatabase,
+    syncPendingUpdates
   } = useDeliveries();
 
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -72,6 +75,33 @@ const Dashboard: React.FC = () => {
   const deliveryGroups = getDeliveryGroups();
   const couriers = Object.keys(deliveryGroups).filter(key => key !== 'all');
 
+  const handleSyncDatabase = async () => {
+    if (!isOnline) {
+      toast({
+        title: 'אין חיבור לאינטרנט',
+        description: 'לא ניתן לסנכרן עם הדאטאבייס כרגע. נסה שוב כשתהיה מחובר לאינטרנט.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    toast({
+      title: 'סנכרון נתונים',
+      description: 'מסנכרן נתונים עם הדאטאבייס...',
+    });
+    
+    try {
+      await syncDatabase();
+    } catch (error) {
+      console.error('Error syncing with database:', error);
+      toast({
+        title: 'שגיאה בסנכרון',
+        description: 'אירעה שגיאה בעת סנכרון הנתונים',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (!isAuthenticated) {
     return null;
   }
@@ -106,33 +136,47 @@ const Dashboard: React.FC = () => {
                 <RefreshCw size={12} className="mr-1" />
                 עודכן {formatLastSync()}
               </span>
-              {!isOnline && (
+              {pendingUpdates > 0 && (
                 <>
                   <span className="mx-1">•</span>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 px-2 text-xs"
-                    onClick={() => {
-                      if (navigator.onLine) {
-                        fetchDeliveries();
-                        toast({
-                          title: 'סנכרון ידני',
-                          description: 'מסנכרן נתונים עם Google Sheets...',
-                        });
-                      } else {
-                        toast({
-                          title: 'אין חיבור לאינטרנט',
-                          description: 'לא ניתן לסנכרן כרגע. נסה שוב כשתהיה מחובר לאינטרנט.',
-                          variant: 'destructive',
-                        });
-                      }
-                    }}
-                  >
-                    סנכרן ידנית
-                  </Button>
-                </>  
+                  <span className="flex items-center text-amber-500">
+                    <CloudSync size={12} className="mr-1" />
+                    {pendingUpdates} עדכונים ממתינים
+                  </span>
+                </>
               )}
+              <span className="mx-1">•</span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 px-2 text-xs flex items-center gap-1"
+                onClick={() => {
+                  if (navigator.onLine) {
+                    if (pendingUpdates > 0) {
+                      syncPendingUpdates();
+                      toast({
+                        title: 'סנכרון עדכונים',
+                        description: `מסנכרן ${pendingUpdates} עדכונים ממתינים...`,
+                      });
+                    } else {
+                      fetchDeliveries();
+                      toast({
+                        title: 'סנכרון ידני',
+                        description: 'מסנכרן נתונים עם Google Sheets...',
+                      });
+                    }
+                  } else {
+                    toast({
+                      title: 'אין חיבור לאינטרנט',
+                      description: 'לא ניתן לסנכרן כרגע. נסה שוב כשתהיה מחובר לאינטרנט.',
+                      variant: 'destructive',
+                    });
+                  }
+                }}
+              >
+                <RefreshCw size={12} />
+                סנכרן
+              </Button>
             </div>
           </div>
           
@@ -141,14 +185,25 @@ const Dashboard: React.FC = () => {
               <FileText className="h-4 w-4" />
               <AlertDescription className="flex items-center justify-between">
                 <span>מקור נתונים: {user.sheetsUrl.substring(0, 30)}...</span>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={fetchDeliveries}
-                  className="h-7 text-xs"
-                >
-                  רענן נתונים
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={fetchDeliveries}
+                    className="h-7 text-xs"
+                  >
+                    רענן מ-Sheets
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleSyncDatabase}
+                    className="h-7 text-xs flex items-center gap-1"
+                  >
+                    <Database size={12} />
+                    סנכרן לדאטאבייס
+                  </Button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
@@ -210,7 +265,7 @@ const Dashboard: React.FC = () => {
                   <FileWarning className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <h3 className="text-lg font-medium mb-2">לא נמצאו משלוחים</h3>
                   <p className="text-muted-foreground mb-4">
-                    לא נמצאו נתוני משלוחים בגיליון Google Sheets.
+                    לא נמצאו נתוני משלוחים בגיליון Google Sheets או בדאטאבייס.
                   </p>
                   <p className="text-sm text-muted-foreground mb-4">
                     ודא שהגיליון מכיל את העמודות הנדרשות ושהוא משותף לצפייה ציבורית.

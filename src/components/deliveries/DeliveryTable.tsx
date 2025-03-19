@@ -18,7 +18,7 @@ interface DeliveryTableProps {
   deliveries: Delivery[];
   onUpdateStatus: (id: string, newStatus: string) => Promise<void>;
   isLoading: boolean;
-  sheetsUrl?: string; // Add this line to accept the sheetsUrl prop
+  sheetsUrl?: string;
 }
 
 const DeliveryTable: React.FC<DeliveryTableProps> = ({
@@ -294,7 +294,6 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                       <Phone size={18} />
                     </Button>
                     
-                    {/* Add WhatsApp button */}
                     <Button
                       variant="outline"
                       size="icon"
@@ -388,7 +387,6 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                   <Phone size={18} />
                 </Button>
                 
-                {/* Add WhatsApp button */}
                 <Button
                   variant="outline"
                   size="icon"
