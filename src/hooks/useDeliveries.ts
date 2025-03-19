@@ -22,7 +22,7 @@ export const useDeliveries = () => {
   const [isTestData, setIsTestData] = useState<boolean>(false);
   const [detectedColumns, setDetectedColumns] = useState<Record<string, string>>({});
   const [deliveryHistory, setDeliveryHistory] = useState<Record<string, Delivery[]>>({});
-  const [pendingUpdates, setPendingUpdates<{deliveryId: string, newStatus: string, note?: string}[]>([]);
+  const [pendingUpdates, setPendingUpdates] = useState<Array<{deliveryId: string, newStatus: string, note?: string}>>([]);
 
   // Check if we're online
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -261,10 +261,10 @@ export const useDeliveries = () => {
         // הוספת ההיסטוריה החדשה
         const historyData = delivery.history.map(entry => ({
           delivery_id: delivery.id,
-          status: entry.status,
-          timestamp: entry.timestamp,
-          note: entry.note || null,
-          courier: entry.courier || null
+          status: delivery.status,
+          timestamp: delivery.timestamp,
+          note: delivery.note || null,
+          courier: delivery.courier || null
         }));
         
         const { error: historyError } = await supabase
