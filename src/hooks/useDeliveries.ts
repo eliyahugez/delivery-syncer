@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { Delivery, COLUMN_SIGNATURES, DELIVERY_STATUS_OPTIONS } from "@/types/delivery";
 import {
@@ -63,7 +62,7 @@ export const useDeliveries = () => {
     
     if (updates.length === 0) return;
     
-    let failedUpdates: typeof updates = [];
+    let failedUpdates: PendingUpdate[] = [];
     
     for (const update of updates) {
       try {
