@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -140,7 +139,7 @@ const Dashboard: React.FC = () => {
                 <>
                   <span className="mx-1">•</span>
                   <span className="flex items-center text-amber-500">
-                    <CloudSync size={12} className="mr-1" />
+                    <CloudSun size={12} className="mr-1" />
                     {pendingUpdates} עדכונים ממתינים
                   </span>
                 </>

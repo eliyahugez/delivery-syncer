@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { Delivery, COLUMN_SIGNATURES, DELIVERY_STATUS_OPTIONS } from "@/types/delivery";
 import {
@@ -23,7 +22,7 @@ export const useDeliveries = () => {
   const [isTestData, setIsTestData] = useState<boolean>(false);
   const [detectedColumns, setDetectedColumns] = useState<Record<string, string>>({});
   const [deliveryHistory, setDeliveryHistory] = useState<Record<string, Delivery[]>>({});
-  const [pendingUpdates, setPendingUpdates] = useState<{deliveryId: string, newStatus: string, note?: string}[]>([]);
+  const [pendingUpdates, setPendingUpdates<{deliveryId: string, newStatus: string, note?: string}[]>([]);
 
   // Check if we're online
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -349,7 +348,7 @@ export const useDeliveries = () => {
             .upsert({
               sheet_url: user.sheetsUrl,
               mappings: newDetectedColumns,
-              user_id: user?.uid || null
+              user_id: user?.name || null
             }, { onConflict: 'sheet_url' });
             
           if (error) {

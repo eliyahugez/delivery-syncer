@@ -5,6 +5,7 @@ import { saveToStorage, getFromStorage, removeFromStorage, storageKeys } from '@
 interface User {
   name: string;
   sheetsUrl: string;
+  uid?: string; // Adding optional uid property to the User interface
 }
 
 interface AuthContextType {
