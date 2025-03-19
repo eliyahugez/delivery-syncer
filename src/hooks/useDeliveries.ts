@@ -84,7 +84,7 @@ export const useDeliveries = () => {
       toast({
         title: "סנכרון חלקי",
         description: `${failedUpdates.length} עדכונים עדיין ממתינים לסנכרון`,
-        variant: "warning",
+        variant: "destructive",
       });
     }
   }, [isOnline]);
@@ -262,9 +262,9 @@ export const useDeliveries = () => {
         const historyData = delivery.history.map(entry => ({
           delivery_id: delivery.id,
           status: delivery.status,
-          timestamp: delivery.timestamp,
-          note: delivery.note || null,
-          courier: delivery.courier || null
+          timestamp: entry.timestamp,
+          note: entry.note || null,
+          courier: entry.courier || null
         }));
         
         const { error: historyError } = await supabase
@@ -296,7 +296,7 @@ export const useDeliveries = () => {
       toast({
         title: "סנכרון לדאטאבייס",
         description: `${successCount} מתוך ${deliveries.length} משלוחים סונכרנו בהצלחה`,
-        variant: successCount === deliveries.length ? "default" : "warning",
+        variant: successCount === deliveries.length ? "default" : "destructive",
       });
       
       return successCount === deliveries.length;
@@ -490,7 +490,7 @@ export const useDeliveries = () => {
           toast({
             title: 'שגיאה בשמירה',
             description: 'המשלוח לא נשמר בדאטאבייס, אך נשמר באופן מקומי',
-            variant: "warning",
+            variant: "destructive",
           });
         }
       });
@@ -572,7 +572,7 @@ export const useDeliveries = () => {
         toast({
           title: "עדכון מקומי",
           description: "הסטטוס עודכן מקומית ויסונכרן כשהחיבור לאינטרנט יחזור",
-          variant: "warning",
+          variant: "destructive",
         });
         
         return true;

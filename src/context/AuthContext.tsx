@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { saveToStorage, getFromStorage, removeFromStorage, storageKeys } from '@/utils/localStorage';
 
@@ -6,6 +5,7 @@ interface User {
   name: string;
   sheetsUrl: string;
   uid?: string; // Adding optional uid property to the User interface
+  id?: string;  // Adding optional id property to the User interface
 }
 
 interface AuthContextType {

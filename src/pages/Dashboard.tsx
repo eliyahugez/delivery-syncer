@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { CloudSun } from "lucide-react"; // Fixed import from CloudSync to CloudSun
 
 export const useDeliveries = () => {
   const { user } = useAuth();
@@ -261,10 +262,10 @@ export const useDeliveries = () => {
         // הוספת ההיסטוריה החדשה
         const historyData = delivery.history.map(entry => ({
           delivery_id: delivery.id,
-          status: entry.status,
-          timestamp: entry.timestamp,
-          note: entry.note || null,
-          courier: entry.courier || null
+          status: delivery.status,
+          timestamp: delivery.timestamp,
+          note: delivery.note || null,
+          courier: delivery.courier || null
         }));
         
         const { error: historyError } = await supabase
@@ -719,3 +720,17 @@ export const useDeliveries = () => {
     syncPendingUpdates
   };
 };
+
+// Add a Dashboard component that uses the useDeliveries hook
+const Dashboard = () => {
+  const deliveryData = useDeliveries();
+  
+  return (
+    <div className="container mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+      {/* Dashboard content will go here */}
+    </div>
+  );
+};
+
+export default Dashboard;
