@@ -6,9 +6,14 @@ import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Info, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Info, ExternalLink, AlertTriangle, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { 
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const LoginForm: React.FC = () => {
   const [name, setName] = useState('');
@@ -88,7 +93,29 @@ const LoginForm: React.FC = () => {
         </div>
         
         <div className="space-y-2">
-          <Label htmlFor="sheetsUrl">קישור ל-Google Sheets</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="sheetsUrl">קישור ל-Google Sheets</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6">
+                  <HelpCircle size={14} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 text-sm p-4" side="top">
+                <h4 className="font-medium mb-2">מבנה גיליון מומלץ:</h4>
+                <p className="mb-2">המערכת תנסה לזהות אוטומטית את העמודות בגיליון, אך מומלץ להשתמש בכותרות הבאות:</p>
+                <ul className="space-y-1 list-disc list-inside text-xs">
+                  <li>מספר מעקב / Tracking</li>
+                  <li>שם לקוח / Name</li>
+                  <li>טלפון / Phone</li>
+                  <li>כתובת / Address</li>
+                  <li>סטטוס / Status</li>
+                  <li>שליח / Courier</li>
+                  <li>תאריך / Date</li>
+                </ul>
+              </PopoverContent>
+            </Popover>
+          </div>
           <Input
             id="sheetsUrl"
             value={sheetsUrl}
@@ -101,12 +128,13 @@ const LoginForm: React.FC = () => {
             <Info size={14} className="mr-1 mt-0.5 flex-shrink-0" />
             <p>
               הקישור חייב להיות לגיליון Google Sheets עם הרשאות צפייה ציבוריות.
-              וודא שהגיליון מכיל את העמודות: מספר מעקב, תאריך, סטטוס, שם, טלפון, כתובת, ושליח.
+              המערכת תנסה לזהות אוטומטית את העמודות בגיליון שלך.
             </p>
           </div>
         </div>
         
         <Alert className="bg-secondary/50 border-primary/20">
+          <AlertTitle className="text-sm font-medium">הנחיות להגדרת הגיליון</AlertTitle>
           <AlertDescription className="text-xs">
             <div className="flex flex-col space-y-2">
               <p>
@@ -116,8 +144,8 @@ const LoginForm: React.FC = () => {
               <div className="flex items-start gap-2 mt-2">
                 <AlertTriangle size={16} className="text-warning shrink-0 mt-0.5" />
                 <p className="text-xs">
+                  המערכת תזהה אוטומטית עמודות בגיליון אפילו אם הכותרות שונות מהמומלץ.
                   אם לחלק מהמשלוחים חסרים פרטים, הם יוצגו במערכת עם ערכי ברירת מחדל.
-                  ודא שבקובץ שיטס יש לכל משלוח שם, טלפון, כתובת, ושיוך לשליח.
                 </p>
               </div>
               <a 
