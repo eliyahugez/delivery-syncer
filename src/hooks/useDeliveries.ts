@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { Delivery } from "@/types/delivery";
 import {
@@ -96,8 +97,17 @@ export const useDeliveries = () => {
         });
       }
 
-      setDeliveries(fetchedDeliveries);
-      saveToStorage(storageKeys.DELIVERIES_CACHE, fetchedDeliveries);
+      // Ensure all deliveries have required fields (even if empty)
+      const normalizedDeliveries = fetchedDeliveries.map(delivery => ({
+        ...delivery,
+        name: delivery.name || "ללא שם",
+        phone: delivery.phone || "לא זמין",
+        address: delivery.address || "כתובת לא זמינה",
+        assignedTo: delivery.assignedTo || "לא שויך"
+      }));
+
+      setDeliveries(normalizedDeliveries);
+      saveToStorage(storageKeys.DELIVERIES_CACHE, normalizedDeliveries);
 
       const now = new Date();
       setLastSyncTime(now);
@@ -106,7 +116,8 @@ export const useDeliveries = () => {
       setIsLoading(false);
     } catch (err) {
       console.error("Error fetching deliveries:", err);
-      setError("שגיאה בטעינת משלוחים מ-Google Sheets");
+      const errorMessage = err instanceof Error ? err.message : "שגיאה בטעינת משלוחים מ-Google Sheets";
+      setError(errorMessage);
       setIsLoading(false);
     }
   }, [user?.sheetsUrl]);

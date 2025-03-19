@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
@@ -7,11 +8,13 @@ import Header from '@/components/layout/Header';
 import DeliveryTable from '@/components/deliveries/DeliveryTable';
 import { useAuth } from '@/context/AuthContext';
 import { useDeliveries } from '@/hooks/useDeliveries';
-import { WifiOff, RefreshCw, AlertTriangle, FileText, FileWarning } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertTriangle, FileText, FileWarning, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from '@/components/ui/use-toast';
+import { Delivery } from '@/types/delivery';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Dashboard: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
@@ -26,6 +29,8 @@ const Dashboard: React.FC = () => {
     lastSyncTime,
     isTestData
   } = useDeliveries();
+
+  const [activeTab, setActiveTab] = useState<string>("all");
   
   useEffect(() => {
     if (!isAuthenticated) {
@@ -45,6 +50,27 @@ const Dashboard: React.FC = () => {
       return 'לא ידוע';
     }
   };
+
+  // Group deliveries by assignedTo
+  const getDeliveryGroups = () => {
+    const groups: Record<string, Delivery[]> = {
+      all: [...deliveries]
+    };
+    
+    // Create groups by assignedTo
+    deliveries.forEach(delivery => {
+      const courier = delivery.assignedTo || 'לא שויך';
+      if (!groups[courier]) {
+        groups[courier] = [];
+      }
+      groups[courier].push(delivery);
+    });
+    
+    return groups;
+  };
+
+  const deliveryGroups = getDeliveryGroups();
+  const couriers = Object.keys(deliveryGroups).filter(key => key !== 'all');
 
   if (!isAuthenticated) {
     return null;
@@ -149,7 +175,8 @@ const Dashboard: React.FC = () => {
                   <ul className="list-disc list-inside space-y-1">
                     <li>ודא שהקישור לגיליון Google Sheets תקין</li>
                     <li>ודא שהגיליון משותף להצגה ציבורית (לכל מי שיש את הקישור)</li>
-                    <li>ודא שיש לגיליון את העמודות הנדרשות: Tracking, Status, Name, Phone Number, Address</li>
+                    <li>ודא שיש לגיליון את העמודות הנדרשות: Tracking, Status, Name, Phone, Address, Assigned To</li>
+                    <li>נסה להשתמש בקישור לתצוגת הגיליון במקום קישור לעריכה</li>
                   </ul>
                 </div>
               </CardContent>
@@ -178,19 +205,90 @@ const Dashboard: React.FC = () => {
                 </div>
               )}
               
-              <DeliveryTable 
-                deliveries={deliveries} 
-                onUpdateStatus={async (id, newStatus) => {
-                  try {
-                    await updateStatus(id, newStatus);
-                  } catch (error) {
-                    console.error("Error updating status:", error);
-                    throw error;
-                  }
-                }}
-                isLoading={isLoading}
-                sheetsUrl={user?.sheetsUrl}
-              />
+              {deliveries.length === 0 ? (
+                <Card className="p-8 text-center">
+                  <FileWarning className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <h3 className="text-lg font-medium mb-2">לא נמצאו משלוחים</h3>
+                  <p className="text-muted-foreground mb-4">
+                    לא נמצאו נתוני משלוחים בגיליון Google Sheets.
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    ודא שהגיליון מכיל את העמודות הנדרשות ושהוא משותף לצפייה ציבורית.
+                  </p>
+                  <Button onClick={fetchDeliveries}>נסה שוב</Button>
+                </Card>
+              ) : (
+                <>
+                  {couriers.length > 1 && (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Users size={16} />
+                        <h2 className="text-lg font-medium">משלוחים לפי שליחים</h2>
+                      </div>
+                      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+                        <TabsList className="w-full justify-start overflow-x-auto">
+                          <TabsTrigger value="all">הכל ({deliveries.length})</TabsTrigger>
+                          {couriers.map(courier => (
+                            <TabsTrigger key={courier} value={courier}>
+                              {courier} ({deliveryGroups[courier].length})
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                        
+                        <TabsContent value="all">
+                          <DeliveryTable 
+                            deliveries={deliveryGroups.all} 
+                            onUpdateStatus={async (id, newStatus) => {
+                              try {
+                                await updateStatus(id, newStatus);
+                              } catch (error) {
+                                console.error("Error updating status:", error);
+                                throw error;
+                              }
+                            }}
+                            isLoading={isLoading}
+                            sheetsUrl={user?.sheetsUrl}
+                          />
+                        </TabsContent>
+                        
+                        {couriers.map(courier => (
+                          <TabsContent key={courier} value={courier}>
+                            <DeliveryTable 
+                              deliveries={deliveryGroups[courier]} 
+                              onUpdateStatus={async (id, newStatus) => {
+                                try {
+                                  await updateStatus(id, newStatus);
+                                } catch (error) {
+                                  console.error("Error updating status:", error);
+                                  throw error;
+                                }
+                              }}
+                              isLoading={isLoading}
+                              sheetsUrl={user?.sheetsUrl}
+                            />
+                          </TabsContent>
+                        ))}
+                      </Tabs>
+                    </div>
+                  )}
+                  
+                  {couriers.length <= 1 && (
+                    <DeliveryTable 
+                      deliveries={deliveries} 
+                      onUpdateStatus={async (id, newStatus) => {
+                        try {
+                          await updateStatus(id, newStatus);
+                        } catch (error) {
+                          console.error("Error updating status:", error);
+                          throw error;
+                        }
+                      }}
+                      isLoading={isLoading}
+                      sheetsUrl={user?.sheetsUrl}
+                    />
+                  )}
+                </>
+              )}
             </div>
           )}
         </motion.div>

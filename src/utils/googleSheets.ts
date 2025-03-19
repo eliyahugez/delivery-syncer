@@ -1,3 +1,4 @@
+
 import { Delivery } from "@/types/delivery";
 import Papa from "papaparse";
 
@@ -49,6 +50,28 @@ const generateTestData = (): Delivery[] => {
       phone: "05012345678",
       address: "D. N. Lev Hashomron-Maale Shomron 48",
       assignedTo: "שליח 1",
+    },
+    {
+      id: "2",
+      trackingNumber: "YYYYYYYYYY",
+      scanDate: currentDate,
+      statusDate: currentDate,
+      status: "in_progress",
+      name: "David Cohen",
+      phone: "05087654321",
+      address: "Karney Shomron-HaAlon 11/2",
+      assignedTo: "שליח 2",
+    },
+    {
+      id: "3",
+      trackingNumber: "ZZZZZZZZZZ",
+      scanDate: currentDate,
+      statusDate: currentDate,
+      status: "pending",
+      name: "Rachel Levy",
+      phone: "05054321678",
+      address: "Karnei Shomron-Mishol Hakalanit 4",
+      assignedTo: "שליח 3",
     },
   ];
 };
@@ -166,6 +189,14 @@ export const parseJSONPToDeliveries = (jsonData: any): Delivery[] => {
       delivery.status = delivery.status || "pending";
       delivery.statusDate = delivery.statusDate || new Date().toISOString();
       delivery.scanDate = delivery.scanDate || new Date().toISOString();
+      
+      // Ensure we have values for required fields (even placeholders)
+      delivery.name = delivery.name || "ללא שם";
+      delivery.phone = delivery.phone || "לא זמין";
+      delivery.address = delivery.address || "כתובת לא זמינה";
+      
+      // Set a default assignedTo if missing
+      delivery.assignedTo = delivery.assignedTo || "לא שויך";
 
       deliveries.push(delivery as Delivery);
     });
@@ -188,7 +219,7 @@ export const fetchDeliveriesFromSheets = async (
     const spreadsheetId = getSpreadsheetIdFromUrl(sheetsUrl);
     if (!spreadsheetId) {
       console.error("Invalid Google Sheets URL:", sheetsUrl);
-      throw new Error("Invalid Google Sheets URL");
+      throw new Error("קישור גיליון Google לא תקין");
     }
 
     // Try with CORS proxy first
@@ -281,6 +312,8 @@ export const fetchDeliveriesFromSheets = async (
               `Successfully parsed ${deliveries.length} deliveries from JSONP`
             );
             return { deliveries, isTestData: false };
+          } else {
+            console.error("No deliveries parsed from JSONP data");
           }
         } else {
           console.error("Invalid JSONP response format");
@@ -298,6 +331,8 @@ export const fetchDeliveriesFromSheets = async (
           `Successfully parsed ${parsedDeliveries.length} deliveries from CSV`
         );
         return { deliveries: parsedDeliveries, isTestData: false };
+      } else {
+        console.error("No deliveries parsed from CSV data");
       }
     }
 

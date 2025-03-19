@@ -8,5 +8,5 @@ export interface Delivery {
   name: string;
   phone: string;
   address: string;
-  assignedTo?: string; // New field to support multiple delivery personnel
+  assignedTo: string; // שדה שמציין את השליח המטפל במשלוח
 }

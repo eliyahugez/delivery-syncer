@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Info, ExternalLink } from 'lucide-react';
+import { Info, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -101,7 +101,7 @@ const LoginForm: React.FC = () => {
             <Info size={14} className="mr-1 mt-0.5 flex-shrink-0" />
             <p>
               הקישור חייב להיות לגיליון Google Sheets עם הרשאות צפייה ציבוריות.
-              וודא שהגיליון מכיל את העמודות: מספר מעקב, תאריך, סטטוס, שם, טלפון וכתובת.
+              וודא שהגיליון מכיל את העמודות: מספר מעקב, תאריך, סטטוס, שם, טלפון, כתובת, ושליח.
             </p>
           </div>
         </div>
@@ -113,6 +113,13 @@ const LoginForm: React.FC = () => {
                 <strong>חשוב: </strong>
                 עליך לפתוח את הרשאות השיתוף של הגיליון ל"כל מי שיש לו הקישור יכול לצפות".
               </p>
+              <div className="flex items-start gap-2 mt-2">
+                <AlertTriangle size={16} className="text-warning shrink-0 mt-0.5" />
+                <p className="text-xs">
+                  אם לחלק מהמשלוחים חסרים פרטים, הם יוצגו במערכת עם ערכי ברירת מחדל.
+                  ודא שבקובץ שיטס יש לכל משלוח שם, טלפון, כתובת, ושיוך לשליח.
+                </p>
+              </div>
               <a 
                 href="https://support.google.com/docs/answer/2494822?hl=iw" 
                 target="_blank" 
