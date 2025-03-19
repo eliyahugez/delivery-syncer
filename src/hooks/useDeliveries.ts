@@ -15,6 +15,13 @@ import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
 
+// Define the type for the pending updates to avoid deep type instantiation
+interface PendingUpdate {
+  deliveryId: string;
+  newStatus: string;
+  note?: string;
+}
+
 export const useDeliveries = () => {
   const { user } = useAuth();
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -24,7 +31,7 @@ export const useDeliveries = () => {
   const [isTestData, setIsTestData] = useState<boolean>(false);
   const [detectedColumns, setDetectedColumns] = useState<Record<string, string>>({});
   const [deliveryHistory, setDeliveryHistory] = useState<Record<string, Delivery[]>>({});
-  const [pendingUpdates, setPendingUpdates] = useState<Array<{deliveryId: string, newStatus: string, note?: string}>>([]);
+  const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([]);
 
   // Check if we're online
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -49,7 +56,7 @@ export const useDeliveries = () => {
 
   // סנכרון עדכונים שממתינים
   const syncPendingUpdates = useCallback(async () => {
-    const updates = getFromStorage<{deliveryId: string, newStatus: string, note?: string}[]>(
+    const updates = getFromStorage<PendingUpdate[]>(
       storageKeys.OFFLINE_CHANGES, 
       []
     );
@@ -523,7 +530,7 @@ export const useDeliveries = () => {
 
       // אם אין חיבור לאינטרנט, שמור את העדכון מקומית ולתור העדכונים העתידיים
       if (!isOnline) {
-        const updatedPendingUpdates = [...pendingUpdates, { deliveryId, newStatus, note }];
+        const updatedPendingUpdates: PendingUpdate[] = [...pendingUpdates, { deliveryId, newStatus, note }];
         setPendingUpdates(updatedPendingUpdates);
         saveToStorage(storageKeys.OFFLINE_CHANGES, updatedPendingUpdates);
         
