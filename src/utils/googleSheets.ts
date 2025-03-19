@@ -1,5 +1,6 @@
 import { Delivery } from "@/types/delivery";
 import Papa from "papaparse";
+import { supabase } from "@/integrations/supabase/client";
 
 // Function to parse Google Sheets URL and get spreadsheet ID
 export const getSpreadsheetIdFromUrl = (url: string): string => {
@@ -216,9 +217,42 @@ export const fetchDeliveriesFromSheets = async (
   deliveries: Delivery[]; 
   isTestData: boolean;
   detectedColumns?: Record<string, string>;
+  groupedByCourier?: Record<string, Delivery[]>;
+  groupedByDate?: Record<string, Delivery[]>;
 }> => {
   try {
     console.log("Fetching from Google Sheets URL:", sheetsUrl);
+
+    // Try to use the sync-sheets Supabase Edge Function if possible
+    try {
+      console.log("Attempting to sync using Supabase Edge Function...");
+      const { data, error } = await supabase.functions.invoke('sync-sheets', {
+        body: { sheetsUrl }
+      });
+      
+      if (error) {
+        console.error("Edge function error:", error);
+      } else if (data && data.deliveries && data.deliveries.length > 0) {
+        console.log("Successfully synced data via Edge Function:", data);
+        
+        // Save the data to local storage for offline use
+        localStorage.setItem('cached_deliveries', JSON.stringify(data.deliveries));
+        localStorage.setItem('cached_courier_groups', JSON.stringify(data.groupedByCourier || {}));
+        localStorage.setItem('cached_date_groups', JSON.stringify(data.groupedByDate || {}));
+        localStorage.setItem('last_sync_time', new Date().toISOString());
+        
+        return { 
+          deliveries: data.deliveries, 
+          isTestData: false,
+          detectedColumns: data.columnMap,
+          groupedByCourier: data.groupedByCourier,
+          groupedByDate: data.groupedByDate
+        };
+      }
+    } catch (err) {
+      console.error("Error using Edge Function:", err);
+      console.log("Falling back to client-side implementation...");
+    }
 
     const spreadsheetId = getSpreadsheetIdFromUrl(sheetsUrl);
     if (!spreadsheetId) {
@@ -315,7 +349,40 @@ export const fetchDeliveriesFromSheets = async (
             console.log(
               `Successfully parsed ${deliveries.length} deliveries from JSONP`
             );
-            return { deliveries, isTestData: false, detectedColumns: {} };
+            
+            // Group deliveries by courier and date
+            const groupedByCourier: Record<string, Delivery[]> = {};
+            const groupedByDate: Record<string, Delivery[]> = {};
+            
+            deliveries.forEach(delivery => {
+              // Group by courier
+              if (!groupedByCourier[delivery.assignedTo]) {
+                groupedByCourier[delivery.assignedTo] = [];
+              }
+              groupedByCourier[delivery.assignedTo].push(delivery);
+              
+              // Group by date within courier
+              const dateKey = new Date(delivery.statusDate).toISOString().split('T')[0];
+              const courierDateKey = `${delivery.assignedTo}-${dateKey}`;
+              if (!groupedByDate[courierDateKey]) {
+                groupedByDate[courierDateKey] = [];
+              }
+              groupedByDate[courierDateKey].push(delivery);
+            });
+            
+            // Save to local storage
+            localStorage.setItem('cached_deliveries', JSON.stringify(deliveries));
+            localStorage.setItem('cached_courier_groups', JSON.stringify(groupedByCourier));
+            localStorage.setItem('cached_date_groups', JSON.stringify(groupedByDate));
+            localStorage.setItem('last_sync_time', new Date().toISOString());
+            
+            return { 
+              deliveries, 
+              isTestData: false, 
+              detectedColumns: {},
+              groupedByCourier,
+              groupedByDate
+            };
           } else {
             console.error("No deliveries parsed from JSONP data");
           }
@@ -334,14 +401,63 @@ export const fetchDeliveriesFromSheets = async (
         console.log(
           `Successfully parsed ${parsedDeliveries.length} deliveries from CSV`
         );
+        
+        // Group deliveries by courier and date
+        const groupedByCourier: Record<string, Delivery[]> = {};
+        const groupedByDate: Record<string, Delivery[]> = {};
+        
+        parsedDeliveries.forEach(delivery => {
+          // Group by courier
+          if (!groupedByCourier[delivery.assignedTo]) {
+            groupedByCourier[delivery.assignedTo] = [];
+          }
+          groupedByCourier[delivery.assignedTo].push(delivery);
+          
+          // Group by date within courier
+          const dateKey = new Date(delivery.statusDate).toISOString().split('T')[0];
+          const courierDateKey = `${delivery.assignedTo}-${dateKey}`;
+          if (!groupedByDate[courierDateKey]) {
+            groupedByDate[courierDateKey] = [];
+          }
+          groupedByDate[courierDateKey].push(delivery);
+        });
+        
+        // Save to local storage
+        localStorage.setItem('cached_deliveries', JSON.stringify(parsedDeliveries));
+        localStorage.setItem('cached_courier_groups', JSON.stringify(groupedByCourier));
+        localStorage.setItem('cached_date_groups', JSON.stringify(groupedByDate));
+        localStorage.setItem('last_sync_time', new Date().toISOString());
+        
         return { 
           deliveries: parsedDeliveries, 
           isTestData: false,
-          detectedColumns 
+          detectedColumns,
+          groupedByCourier,
+          groupedByDate
         };
       } else {
         console.error("No deliveries parsed from CSV data");
       }
+    }
+
+    // Try to load from local storage if available
+    const cachedData = localStorage.getItem('cached_deliveries');
+    const cachedCourierGroups = localStorage.getItem('cached_courier_groups');
+    const cachedDateGroups = localStorage.getItem('cached_date_groups');
+    
+    if (cachedData) {
+      console.log("Loading cached data from local storage");
+      const deliveries = JSON.parse(cachedData);
+      const groupedByCourier = cachedCourierGroups ? JSON.parse(cachedCourierGroups) : {};
+      const groupedByDate = cachedDateGroups ? JSON.parse(cachedDateGroups) : {};
+      
+      return { 
+        deliveries, 
+        isTestData: false,
+        detectedColumns: {},
+        groupedByCourier,
+        groupedByDate
+      };
     }
 
     // If all approaches fail, fallback to test data
@@ -355,6 +471,26 @@ export const fetchDeliveriesFromSheets = async (
     };
   } catch (error) {
     console.error("Error fetching from Google Sheets:", error);
+
+    // Try to load from local storage if available
+    const cachedData = localStorage.getItem('cached_deliveries');
+    const cachedCourierGroups = localStorage.getItem('cached_courier_groups');
+    const cachedDateGroups = localStorage.getItem('cached_date_groups');
+    
+    if (cachedData) {
+      console.log("Loading cached data from local storage");
+      const deliveries = JSON.parse(cachedData);
+      const groupedByCourier = cachedCourierGroups ? JSON.parse(cachedCourierGroups) : {};
+      const groupedByDate = cachedDateGroups ? JSON.parse(cachedDateGroups) : {};
+      
+      return { 
+        deliveries, 
+        isTestData: false,
+        detectedColumns: {},
+        groupedByCourier,
+        groupedByDate
+      };
+    }
 
     // Return test data as fallback
     console.warn("Returning test data due to fetch error");

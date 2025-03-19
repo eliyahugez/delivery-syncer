@@ -14,9 +14,11 @@ serve(async (req) => {
   }
 
   try {
+    console.log("Starting sync-sheets function");
     const { sheetsUrl } = await req.json();
 
     if (!sheetsUrl) {
+      console.error("Error: Missing Google Sheets URL");
       return new Response(
         JSON.stringify({ error: 'Google Sheets URL is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -28,9 +30,12 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+    console.log(`Processing sheet: ${sheetsUrl}`);
+
     // Extract sheets ID from URL
     const spreadsheetId = extractSheetId(sheetsUrl);
     if (!spreadsheetId) {
+      console.error("Error: Invalid Google Sheets URL");
       return new Response(
         JSON.stringify({ error: 'Invalid Google Sheets URL' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -38,10 +43,12 @@ serve(async (req) => {
     }
 
     // Get Google Sheets data
+    console.log("Fetching data from Google Sheets...");
     const response = await fetchSheetsData(spreadsheetId);
     
     // Process the data and save to Supabase
-    const result = await processAndSaveData(response, supabase);
+    console.log("Processing and saving data...");
+    const result = await processAndSaveData(response, supabase, sheetsUrl);
 
     return new Response(
       JSON.stringify(result),
@@ -74,6 +81,7 @@ async function fetchSheetsData(spreadsheetId: string): Promise<any> {
   const response = await fetch(apiUrl);
   
   if (!response.ok) {
+    console.error(`Fetch error: ${response.status} ${response.statusText}`);
     throw new Error(`Failed to fetch Google Sheets: ${response.status} ${response.statusText}`);
   }
   
@@ -84,6 +92,7 @@ async function fetchSheetsData(spreadsheetId: string): Promise<any> {
   const jsonEnd = text.lastIndexOf('}') + 1;
   
   if (jsonStart < 0 || jsonEnd <= 0) {
+    console.error("Invalid response format");
     throw new Error('Invalid response format from Google Sheets');
   }
   
@@ -98,8 +107,9 @@ async function fetchSheetsData(spreadsheetId: string): Promise<any> {
 }
 
 // Function to process Google Sheets data and save to Supabase
-async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> {
+async function processAndSaveData(sheetsData: any, supabase: any, sheetsUrl: string): Promise<any> {
   if (!sheetsData || !sheetsData.table || !sheetsData.table.rows || !sheetsData.table.cols) {
+    console.error("Invalid data structure", sheetsData);
     throw new Error('Invalid Google Sheets data structure');
   }
 
@@ -113,6 +123,8 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
   const rows = sheetsData.table.rows;
   const deliveries = [];
   const dbOperations = [];
+  const courierMap = new Map(); // Group by courier
+  const dateMap = new Map(); // Group by date within courier
   
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -133,6 +145,7 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
 
     // Generate a unique ID (or check if it exists in the database already)
     const id = `${trackingNumber}-${i}`;
+    const external_id = `sheet-${spreadsheetId}-${trackingNumber}`; // External ID for tracking source
 
     // Create the delivery object for the response
     const delivery = {
@@ -144,10 +157,25 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
       name,
       phone,
       address,
-      assignedTo
+      assignedTo,
+      external_id
     };
 
     deliveries.push(delivery);
+
+    // Group by courier
+    if (!courierMap.has(assignedTo)) {
+      courierMap.set(assignedTo, []);
+    }
+    courierMap.get(assignedTo).push(delivery);
+
+    // Group by date within courier
+    const dateKey = new Date(statusDate).toISOString().split('T')[0]; // Get just the date part
+    const courierDateKey = `${assignedTo}-${dateKey}`;
+    if (!dateMap.has(courierDateKey)) {
+      dateMap.set(courierDateKey, []);
+    }
+    dateMap.get(courierDateKey).push(delivery);
 
     // Prepare database record
     const dbRecord = {
@@ -159,7 +187,8 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
       name,
       phone,
       address,
-      assigned_to: assignedTo
+      assigned_to: assignedTo,
+      external_id
     };
 
     // Upsert delivery record
@@ -203,16 +232,26 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
     .from('column_mappings')
     .upsert(
       {
-        sheet_url: 'last_mapping',
+        sheet_url: sheetsUrl,
         mappings: columnMap
       },
       { onConflict: 'sheet_url' }
     );
 
+  // Log the data groupings for debugging
+  console.log(`Grouped deliveries by courier: ${courierMap.size} couriers`);
+  for (const [courier, items] of courierMap.entries()) {
+    console.log(`- Courier "${courier}": ${items.length} deliveries`);
+  }
+
+  console.log(`Grouped deliveries by courier+date: ${dateMap.size} combinations`);
+
   return {
     deliveries,
     columnMap,
-    count: deliveries.length
+    count: deliveries.length,
+    groupedByCourier: Object.fromEntries(courierMap),
+    groupedByDate: Object.fromEntries(dateMap)
   };
 }
 
