@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { Delivery, COLUMN_SIGNATURES, DELIVERY_STATUS_OPTIONS } from "@/types/delivery";
 import {
@@ -12,6 +13,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { v4 as uuidv4 } from 'uuid';
 
 export const useDeliveries = () => {
   const { user } = useAuth();
@@ -213,9 +215,12 @@ export const useDeliveries = () => {
     if (!isOnline) return false;
     
     try {
+      // יצירת UUID מתוך המזהה הקיים או יצירת חדש
+      const dbId = uuidv4();
+      
       // המרת המשלוח לפורמט הדאטאבייס
       const deliveryData = {
-        id: delivery.id,
+        id: dbId,
         tracking_number: delivery.trackingNumber,
         scan_date: delivery.scanDate,
         status_date: delivery.statusDate,
@@ -223,14 +228,15 @@ export const useDeliveries = () => {
         name: delivery.name,
         phone: delivery.phone,
         address: delivery.address,
-        assigned_to: delivery.assignedTo
+        assigned_to: delivery.assignedTo,
+        external_id: delivery.id // שומר את המזהה המקורי כשדה נפרד
       };
       
-      // בדיקה אם המשלוח כבר קיים
+      // בדיקה אם המשלוח כבר קיים לפי external_id
       const { data: existingDelivery } = await supabase
         .from('deliveries')
         .select('id')
-        .eq('id', delivery.id)
+        .eq('external_id', delivery.id)
         .maybeSingle();
         
       let result;
@@ -240,7 +246,7 @@ export const useDeliveries = () => {
         result = await supabase
           .from('deliveries')
           .update(deliveryData)
-          .eq('id', delivery.id);
+          .eq('external_id', delivery.id);
       } else {
         // הוספת משלוח חדש
         result = await supabase
@@ -253,15 +259,18 @@ export const useDeliveries = () => {
       // שמירת ההיסטוריה, אם יש
       if (delivery.history && delivery.history.length > 0) {
         // מחיקת היסטוריה קיימת ויצירתה מחדש
-        await supabase
-          .from('delivery_history')
-          .delete()
-          .eq('delivery_id', delivery.id);
+        if (existingDelivery) {
+          await supabase
+            .from('delivery_history')
+            .delete()
+            .eq('delivery_id', existingDelivery.id);
+        }
           
         // הוספת ההיסטוריה החדשה
         const historyData = delivery.history.map(entry => ({
-          delivery_id: delivery.id,
-          status: delivery.status,
+          id: uuidv4(),
+          delivery_id: existingDelivery?.id || dbId,
+          status: entry.status,
           timestamp: entry.timestamp,
           note: entry.note || null,
           courier: entry.courier || null
@@ -346,10 +355,11 @@ export const useDeliveries = () => {
           const { error } = await supabase
             .from('column_mappings')
             .upsert({
+              id: uuidv4(),
               sheet_url: user.sheetsUrl,
               mappings: newDetectedColumns,
               user_id: user?.name || null
-            }, { onConflict: 'sheet_url' });
+            });
             
           if (error) {
             console.error("Error saving column mappings to DB:", error);
