@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { Delivery, COLUMN_SIGNATURES, DELIVERY_STATUS_OPTIONS } from "@/types/delivery";
 import {
@@ -62,12 +63,18 @@ export const useDeliveries = () => {
     
     if (updates.length === 0) return;
     
+    // Explicitly type the array to avoid deep type instantiation
     let failedUpdates: PendingUpdate[] = [];
     
     for (const update of updates) {
       try {
         if (isOnline) {
-          await updateStatus(update.deliveryId, update.newStatus, update.note);
+          // Explicitly provide the type for update parameters
+          await updateStatus(
+            update.deliveryId, 
+            update.newStatus,
+            update.note
+          );
         } else {
           failedUpdates.push(update);
         }
