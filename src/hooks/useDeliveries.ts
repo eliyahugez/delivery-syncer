@@ -261,10 +261,10 @@ export const useDeliveries = () => {
         // הוספת ההיסטוריה החדשה
         const historyData = delivery.history.map(entry => ({
           delivery_id: delivery.id,
-          status: entry.status,
-          timestamp: entry.timestamp,
-          note: entry.note || null,
-          courier: entry.courier || null
+          status: delivery.status,
+          timestamp: delivery.timestamp,
+          note: delivery.note || null,
+          courier: delivery.courier || null
         }));
         
         const { error: historyError } = await supabase
