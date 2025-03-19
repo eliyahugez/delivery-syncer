@@ -8,7 +8,7 @@ import Header from '@/components/layout/Header';
 import DeliveryTable from '@/components/deliveries/DeliveryTable';
 import { useAuth } from '@/context/AuthContext';
 import { useDeliveries } from '@/hooks/useDeliveries';
-import { WifiOff, RefreshCw, AlertTriangle, FileText, FileWarning, Users, Database, CloudSync } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertTriangle, FileText, FileWarning, Users, Database, CloudSun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";

@@ -349,7 +349,7 @@ export const useDeliveries = () => {
             .upsert({
               sheet_url: user.sheetsUrl,
               mappings: newDetectedColumns,
-              user_id: user.id || null
+              user_id: user?.uid || null
             }, { onConflict: 'sheet_url' });
             
           if (error) {
@@ -491,7 +491,7 @@ export const useDeliveries = () => {
           toast({
             title: 'שגיאה בשמירה',
             description: 'המשלוח לא נשמר בדאטאבייס, אך נשמר באופן מקומי',
-            variant: 'warning',
+            variant: "warning",
           });
         }
       });
@@ -503,7 +503,7 @@ export const useDeliveries = () => {
     });
     
     return delivery;
-  }, [user?.name, user?.id, isOnline]);
+  }, [user?.name, isOnline]);
 
   // Update delivery status - can handle single or multiple deliveries
   const updateStatus = useCallback(
