@@ -371,7 +371,7 @@ export const useDeliveries = () => {
               id: uuidv4(),
               sheet_url: user.sheetsUrl,
               mappings: newDetectedColumns,
-              user_id: user?.name || null
+              user_id: user?.id || null
             });
             
           if (error) {
