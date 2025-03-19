@@ -1,4 +1,3 @@
-
 import { Delivery } from "@/types/delivery";
 import Papa from "papaparse";
 
@@ -211,8 +210,13 @@ export const parseJSONPToDeliveries = (jsonData: any): Delivery[] => {
 
 // Function to fetch deliveries from Google Sheets
 export const fetchDeliveriesFromSheets = async (
-  sheetsUrl: string
-): Promise<{ deliveries: Delivery[]; isTestData: boolean }> => {
+  sheetsUrl: string,
+  columnSignatures?: Record<string, any>
+): Promise<{ 
+  deliveries: Delivery[]; 
+  isTestData: boolean;
+  detectedColumns?: Record<string, string>;
+}> => {
   try {
     console.log("Fetching from Google Sheets URL:", sheetsUrl);
 
@@ -311,7 +315,7 @@ export const fetchDeliveriesFromSheets = async (
             console.log(
               `Successfully parsed ${deliveries.length} deliveries from JSONP`
             );
-            return { deliveries, isTestData: false };
+            return { deliveries, isTestData: false, detectedColumns: {} };
           } else {
             console.error("No deliveries parsed from JSONP data");
           }
@@ -330,7 +334,11 @@ export const fetchDeliveriesFromSheets = async (
         console.log(
           `Successfully parsed ${parsedDeliveries.length} deliveries from CSV`
         );
-        return { deliveries: parsedDeliveries, isTestData: false };
+        return { 
+          deliveries: parsedDeliveries, 
+          isTestData: false,
+          detectedColumns 
+        };
       } else {
         console.error("No deliveries parsed from CSV data");
       }
@@ -340,13 +348,21 @@ export const fetchDeliveriesFromSheets = async (
     console.warn(
       "All data fetching approaches failed, falling back to test data"
     );
-    return { deliveries: generateTestData(), isTestData: true };
+    return { 
+      deliveries: generateTestData(), 
+      isTestData: true,
+      detectedColumns: {} 
+    };
   } catch (error) {
     console.error("Error fetching from Google Sheets:", error);
 
     // Return test data as fallback
     console.warn("Returning test data due to fetch error");
-    return { deliveries: generateTestData(), isTestData: true };
+    return { 
+      deliveries: generateTestData(), 
+      isTestData: true,
+      detectedColumns: {} 
+    };
   }
 };
 
@@ -673,8 +689,6 @@ const findField = (
       }
     }
   }
-
-  return "";
 
   return "";
 };
