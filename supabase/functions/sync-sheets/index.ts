@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { v4 as uuidv4 } from "https://esm.sh/uuid@9.0.0";
@@ -218,7 +217,10 @@ serve(async (req) => {
 
     // Get Google Sheets data
     try {
+      console.log("Fetching sheets data for ID:", spreadsheetId);
       const response = await fetchSheetsData(spreadsheetId);
+      
+      console.log("Successfully received response from Google Sheets API");
       
       // Process the data and save to Supabase
       const result = await processAndSaveData(response, supabase);
@@ -279,6 +281,19 @@ function extractSheetId(url) {
       return match3[1];
     }
     
+    // Format: gid={number} (this needs the spreadsheetId as well which should be extracted before)
+    const regex4 = /#gid=(\d+)/;
+    const match4 = url.match(regex4);
+    if (match4) {
+      console.log("Found gid parameter:", match4[1]);
+      // Now look for the spreadsheet ID before the gid
+      const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (idMatch && idMatch[1]) {
+        console.log("Extracted spreadsheet ID with gid:", idMatch[1]);
+        return idMatch[1];
+      }
+    }
+    
     // Direct ID (if the user just provided the ID)
     const directIdRegex = /^[a-zA-Z0-9-_]{25,45}$/;
     if (directIdRegex.test(url)) {
@@ -305,6 +320,7 @@ async function fetchSheetsData(spreadsheetId) {
     const response = await fetch(apiUrl);
     
     if (!response.ok) {
+      console.error(`Failed to fetch Google Sheets: ${response.status} ${response.statusText}`);
       throw new Error(`Failed to fetch Google Sheets: ${response.status} ${response.statusText}`);
     }
     
@@ -314,7 +330,7 @@ async function fetchSheetsData(spreadsheetId) {
     // Check if we got an HTML error page instead of JSON
     if (text.includes("<!DOCTYPE html>") || text.includes("<html>")) {
       console.error("Received HTML instead of JSON data");
-      throw new Error("Invalid response format from Google Sheets (received HTML)");
+      throw new Error("Invalid response format from Google Sheets (received HTML). Please check if the sheet is publicly accessible or has been shared with the correct permissions.");
     }
     
     // Google's response is wrapped in a function call that we need to parse
@@ -323,7 +339,7 @@ async function fetchSheetsData(spreadsheetId) {
     
     if (jsonStart < 0 || jsonEnd <= 0) {
       console.error("Invalid response format, cannot find JSON:", text.substring(0, 200));
-      throw new Error('Invalid response format from Google Sheets');
+      throw new Error('Invalid response format from Google Sheets. Please check if the sheet is publicly accessible.');
     }
     
     const jsonString = text.substring(jsonStart, jsonEnd);
@@ -332,11 +348,18 @@ async function fetchSheetsData(spreadsheetId) {
     try {
       const parsedData = JSON.parse(jsonString);
       console.log("Data parsed successfully");
+      
+      // Check if we have valid data structure 
+      if (!parsedData.table || !parsedData.table.rows || !Array.isArray(parsedData.table.rows)) {
+        console.error("Invalid data structure:", JSON.stringify(parsedData, null, 2).substring(0, 500));
+        throw new Error('The Google Sheet does not contain valid data. Please check the sheet format.');
+      }
+      
       return parsedData;
     } catch (error) {
       console.error('Error parsing Google Sheets response:', error);
       console.error('Problematic JSON string:', jsonString.substring(0, 200) + "...");
-      throw new Error('Failed to parse Google Sheets data');
+      throw new Error('Failed to parse Google Sheets data. The sheet might not be in the expected format.');
     }
   } catch (error) {
     console.error("Error in fetchSheetsData:", error);
@@ -668,24 +691,19 @@ async function processAndSaveData(sheetsData, supabase) {
       };
 
       // Upsert delivery record
-      const { error } = await supabase
-        .from('deliveries')
-        .upsert(dbRecord, { onConflict: 'tracking_number' });
-
-      if (error) {
-        console.error(`Error upserting delivery ${id}:`, error);
-        failedRows.push({ index: i, reason: `DB error: ${error.message}`, data: dbRecord });
-      } else {
-        console.log(`Successfully upserted delivery ${id} with tracking ${finalTrackingNumber}`);
-        
-        // Create a history entry for new deliveries
-        const { data: existing } = await supabase
-          .from('delivery_history')
-          .select('id')
-          .eq('delivery_id', id)
-          .limit(1);
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .insert(dbRecord)
+          .select();
+  
+        if (error) {
+          console.error(`Error inserting delivery ${id}:`, error);
+          failedRows.push({ index: i, reason: `DB error: ${error.message}`, data: dbRecord });
+        } else {
+          console.log(`Successfully inserted delivery ${id} with tracking ${finalTrackingNumber}`);
           
-        if (!existing || existing.length === 0) {
+          // Create a history entry for new deliveries
           const { error: historyError } = await supabase
             .from('delivery_history')
             .insert({
@@ -701,6 +719,9 @@ async function processAndSaveData(sheetsData, supabase) {
             console.log(`Created history entry for ${id}`);
           }
         }
+      } catch (error) {
+        console.error(`Error during database operation for row ${i}:`, error);
+        failedRows.push({ index: i, reason: `Database operation failed: ${error.message}`, data: dbRecord });
       }
     } catch (error) {
       console.error(`Error processing row ${i}:`, error);
@@ -718,18 +739,22 @@ async function processAndSaveData(sheetsData, supabase) {
   }
 
   // Save column mappings
-  await supabase
-    .from('column_mappings')
-    .upsert(
-      {
-        sheet_url: 'last_mapping',
-        mappings: columnMap
-      },
-      { onConflict: 'sheet_url' }
-    );
+  try {
+    await supabase
+      .from('column_mappings')
+      .insert(
+        {
+          sheet_url: extractSheetId(JSON.stringify(sheetsData)) || 'last_mapping',
+          mappings: columnMap
+        }
+      )
+      .select();
+  } catch (error) {
+    console.error("Error saving column mappings:", error);
+  }
     
   // Get unique status options
-  const statusOptions = await fetchStatusOptionsFromSheets(`https://docs.google.com/spreadsheets/d/${extractSheetId(sheetsData)}`);
+  const statusOptions = await fetchStatusOptionsFromSheets(`https://docs.google.com/spreadsheets/d/${extractSheetId(JSON.stringify(sheetsData))}`);
 
   return {
     deliveries,

@@ -58,6 +58,20 @@ export function useSyncDeliveries() {
           const cleanedUrl = cleanSheetUrl(sheetsUrl);
           console.log("Using cleaned sheets URL:", cleanedUrl);
           
+          // First try to get just the status options to check if the sheet is accessible
+          const optionsResponse = await supabase.functions.invoke("sync-sheets", {
+            body: { 
+              action: "getStatusOptions",
+              sheetsUrl: cleanedUrl
+            }
+          });
+          
+          if (optionsResponse.error) {
+            console.error("Error fetching status options:", optionsResponse.error);
+            throw new Error(`Error accessing Google Sheet: ${optionsResponse.error.message}`);
+          }
+          
+          // Now fetch the full data
           const response = await supabase.functions.invoke("sync-sheets", {
             body: { 
               sheetsUrl: cleanedUrl
@@ -66,7 +80,7 @@ export function useSyncDeliveries() {
           
           if (response.error) {
             console.error("Supabase function error:", response.error);
-            throw new Error(response.error.message);
+            throw new Error(response.error.message || "Error fetching deliveries from server");
           }
           
           if (response.data?.deliveries) {
@@ -90,6 +104,9 @@ export function useSyncDeliveries() {
               statusOptions,
               lastSyncTime: now
             };
+          } else {
+            console.error("No deliveries data in response:", response.data);
+            throw new Error("No delivery data returned from server");
           }
         } catch (e) {
           console.error("Error fetching from Supabase:", e);
@@ -137,13 +154,6 @@ export function useSyncDeliveries() {
           throw new Error("אין חיבור לאינטרנט ולא נמצאו נתונים מקומיים");
         }
       }
-      
-      // Fallback return with empty data
-      return {
-        deliveries: [],
-        statusOptions: [],
-        lastSyncTime: null
-      };
     } catch (err) {
       console.error("Error in fetchDeliveries:", err);
       throw err;
@@ -161,21 +171,28 @@ export function useSyncDeliveries() {
     
     try {
       // Extract the spreadsheet ID
+      // Format: /d/{spreadsheetId}/
       let match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
       if (match && match[1]) {
         return match[1]; // Just return the ID to avoid URL format issues
       }
       
-      // Try another format
+      // Format: spreadsheets/d/{spreadsheetId}/
       match = url.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
       if (match && match[1]) {
         return match[1]; // Just return the ID to avoid URL format issues
       }
       
-      // Try yet another format
+      // Format: key={spreadsheetId}
       match = url.match(/key=([a-zA-Z0-9-_]+)/);
       if (match && match[1]) {
         return match[1]; // Just return the ID to avoid URL format issues
+      }
+      
+      // Format with gid parameter
+      match = url.match(/\/d\/([a-zA-Z0-9-_]+).*#gid=\d+/);
+      if (match && match[1]) {
+        return match[1]; // Return just the ID without the gid
       }
     } catch (error) {
       console.error("Error cleaning sheet URL:", error);
