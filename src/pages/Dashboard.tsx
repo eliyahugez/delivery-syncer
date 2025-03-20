@@ -3,8 +3,19 @@ import React, { useState } from "react";
 import { useDeliveries } from "@/hooks/useDeliveries";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { CloudSun, RefreshCw } from "lucide-react";
+import { 
+  CloudSun, 
+  RefreshCw, 
+  Filter, 
+  Grid, 
+  List, 
+  Upload,
+  Users
+} from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DeliveryTable from "@/components/deliveries/DeliveryTable";
+import DeliveryGroups from "@/components/deliveries/DeliveryGroups";
+import DeliveryImport from "@/components/deliveries/DeliveryImport";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -18,10 +29,13 @@ const Dashboard = () => {
     updateStatus,
     pendingUpdates,
     syncPendingUpdates,
-    deliveryStatusOptions
+    deliveryStatusOptions,
+    deliveryGroups
   } = useDeliveries();
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [viewMode, setViewMode] = useState<"table" | "groups">("groups");
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -46,6 +60,15 @@ const Dashboard = () => {
 
   const handleUpdateStatus = async (id: string, newStatus: string, updateType?: string) => {
     await updateStatus(id, newStatus, updateType);
+  };
+  
+  const handleImportComplete = (importedData: any[], mappings: Record<string, string>) => {
+    console.log("Import completed:", importedData.length, "items");
+    console.log("Column mappings:", mappings);
+    
+    // Refresh data after import
+    fetchDeliveries();
+    setShowImportModal(false);
   };
 
   return (
@@ -81,6 +104,15 @@ const Dashboard = () => {
           
           <div className="flex gap-2">
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowImportModal(true)}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              ייבוא משלוחים
+            </Button>
+            
+            <Button
               className="flex items-center gap-2"
               onClick={handleSync}
               disabled={isSyncing || !isOnline}
@@ -107,17 +139,64 @@ const Dashboard = () => {
             <p>{error}</p>
           </div>
         )}
+        
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <Button 
+              variant={viewMode === "groups" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setViewMode("groups")}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              לפי לקוחות
+            </Button>
+            <Button 
+              variant={viewMode === "table" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setViewMode("table")}
+            >
+              <List className="h-4 w-4 mr-2" />
+              טבלת משלוחים
+            </Button>
+          </div>
+          
+          <div>
+            <Button variant="ghost" size="sm">
+              <Filter className="h-4 w-4 mr-2" />
+              סינון
+            </Button>
+          </div>
+        </div>
       </header>
 
       <main>
-        <DeliveryTable
-          deliveries={deliveries}
-          onUpdateStatus={handleUpdateStatus}
-          isLoading={isLoading}
-          sheetsUrl={user?.sheetsUrl}
-          statusOptions={deliveryStatusOptions}
-        />
+        {viewMode === "table" ? (
+          <DeliveryTable
+            deliveries={deliveries}
+            onUpdateStatus={handleUpdateStatus}
+            isLoading={isLoading}
+            sheetsUrl={user?.sheetsUrl}
+            statusOptions={deliveryStatusOptions}
+          />
+        ) : (
+          <DeliveryGroups
+            groups={deliveryGroups}
+            statusOptions={deliveryStatusOptions}
+            onUpdateStatus={handleUpdateStatus}
+            isLoading={isLoading}
+          />
+        )}
       </main>
+      
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50 p-4">
+          <DeliveryImport
+            onImportComplete={handleImportComplete}
+            onClose={() => setShowImportModal(false)}
+          />
+        </div>
+      )}
     </div>
   );
 };

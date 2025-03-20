@@ -96,6 +96,20 @@ serve(async (req) => {
           console.error('Error creating history entries:', historyError);
         }
         
+        // Update Google Sheets for all related deliveries
+        if (sheetsUrl) {
+          try {
+            await updateGoogleSheetsForBatchUpdate(
+              sheetsUrl, 
+              delivery.name, 
+              newStatus, 
+              relatedDeliveries.map(d => d.tracking_number)
+            );
+          } catch (sheetError) {
+            console.error("Error updating Google Sheets:", sheetError);
+          }
+        }
+        
         return new Response(
           JSON.stringify({ 
             success: true, 
@@ -107,6 +121,21 @@ serve(async (req) => {
       } else {
         // Single delivery update
         console.log(`Updating delivery ${deliveryId} to status ${newStatus}`);
+        
+        // Get the delivery details
+        const { data: delivery, error: fetchError } = await supabase
+          .from('deliveries')
+          .select('*')
+          .eq('id', deliveryId)
+          .single();
+          
+        if (fetchError || !delivery) {
+          console.error('Error fetching delivery:', fetchError);
+          return new Response(
+            JSON.stringify({ error: 'Delivery not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         
         const now = new Date().toISOString();
         const { error: updateError } = await supabase
@@ -132,6 +161,15 @@ serve(async (req) => {
         
         if (historyError) {
           console.error('Error creating history entry:', historyError);
+        }
+        
+        // Update Google Sheets
+        if (sheetsUrl && delivery.tracking_number) {
+          try {
+            await updateGoogleSheets(sheetsUrl, delivery.tracking_number, newStatus);
+          } catch (sheetError) {
+            console.error("Error updating Google Sheets:", sheetError);
+          }
         }
         
         return new Response(
@@ -229,6 +267,113 @@ async function fetchSheetsData(spreadsheetId: string): Promise<any> {
   }
 }
 
+// New function to update Google Sheets for a batch of deliveries by customer name
+async function updateGoogleSheetsForBatchUpdate(
+  sheetsUrl: string,
+  customerName: string,
+  newStatus: string,
+  trackingNumbers: string[]
+): Promise<void> {
+  try {
+    console.log(`Updating Google Sheets for customer ${customerName} with ${trackingNumbers.length} deliveries`);
+    
+    // Extract spreadsheet ID
+    const spreadsheetId = extractSheetId(sheetsUrl);
+    if (!spreadsheetId) {
+      throw new Error("Invalid Google Sheets URL");
+    }
+    
+    // Get the sheet data
+    const data = await fetchSheetsData(spreadsheetId);
+    
+    if (!data?.table?.rows || !data?.table?.cols) {
+      throw new Error("Invalid sheet structure");
+    }
+    
+    // Find status and tracking number columns
+    const columns = data.table.cols.map((col: any) => col.label || "");
+    
+    const trackingColIndex = columns.findIndex((col: string) => 
+      col.toLowerCase().includes("track") || 
+      col.toLowerCase().includes("מעקב") || 
+      col.toLowerCase().includes("מספר משלוח"));
+      
+    const statusColIndex = columns.findIndex((col: string) => 
+      col.toLowerCase().includes("status") || 
+      col.toLowerCase().includes("סטטוס") || 
+      col.toLowerCase().includes("מצב"));
+      
+    if (trackingColIndex === -1 || statusColIndex === -1) {
+      throw new Error("Could not find tracking number or status columns");
+    }
+    
+    console.log(`Found columns: Tracking=${trackingColIndex}, Status=${statusColIndex}`);
+    
+    // In a real implementation, we would use the Google Sheets API to update the sheet
+    console.log(`Would update ${trackingNumbers.length} rows in Google Sheets for customer ${customerName}`);
+    console.log("Tracking numbers:", trackingNumbers);
+    console.log("New status:", newStatus);
+    
+    // This is a placeholder for the actual implementation with the Google Sheets API
+    return;
+  } catch (error) {
+    console.error("Error updating Google Sheets for batch update:", error);
+    throw error;
+  }
+}
+
+// New function to update a single delivery in Google Sheets
+async function updateGoogleSheets(
+  sheetsUrl: string,
+  trackingNumber: string,
+  newStatus: string
+): Promise<void> {
+  try {
+    console.log(`Updating Google Sheets for tracking number ${trackingNumber} to status ${newStatus}`);
+    
+    // Extract spreadsheet ID
+    const spreadsheetId = extractSheetId(sheetsUrl);
+    if (!spreadsheetId) {
+      throw new Error("Invalid Google Sheets URL");
+    }
+    
+    // Get the sheet data
+    const data = await fetchSheetsData(spreadsheetId);
+    
+    if (!data?.table?.rows || !data?.table?.cols) {
+      throw new Error("Invalid sheet structure");
+    }
+    
+    // Find status and tracking number columns
+    const columns = data.table.cols.map((col: any) => col.label || "");
+    
+    const trackingColIndex = columns.findIndex((col: string) => 
+      col.toLowerCase().includes("track") || 
+      col.toLowerCase().includes("מעקב") || 
+      col.toLowerCase().includes("מספר משלוח"));
+      
+    const statusColIndex = columns.findIndex((col: string) => 
+      col.toLowerCase().includes("status") || 
+      col.toLowerCase().includes("סטטוס") || 
+      col.toLowerCase().includes("מצב"));
+      
+    if (trackingColIndex === -1 || statusColIndex === -1) {
+      throw new Error("Could not find tracking number or status columns");
+    }
+    
+    console.log(`Found columns: Tracking=${trackingColIndex}, Status=${statusColIndex}`);
+    
+    // In a real implementation, we would use the Google Sheets API to update the sheet
+    console.log(`Would update row with tracking number ${trackingNumber} to status ${newStatus}`);
+    
+    // This is a placeholder for the actual implementation with the Google Sheets API
+    return;
+  } catch (error) {
+    console.error("Error updating Google Sheets:", error);
+    throw error;
+  }
+}
+
 // Enhanced function to fetch status options from the Google Sheet
 async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
   try {
@@ -283,7 +428,28 @@ async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
     });
 
     console.log('Found status options:', options);
-    return options.length > 0 ? options : [
+    
+    // Sort the options in a logical order
+    const statusOrder = ["pending", "in_progress", "delivered", "failed", "returned"];
+    
+    const sortedOptions = [...options].sort((a, b) => {
+      const indexA = statusOrder.indexOf(a.value);
+      const indexB = statusOrder.indexOf(b.value);
+      
+      // If both statuses are in our predefined order, sort by that order
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      
+      // If only one status is in our order, prioritize it
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      
+      // Otherwise sort alphabetically by label
+      return a.label.localeCompare(b.label);
+    });
+    
+    return sortedOptions.length > 0 ? sortedOptions : [
       { value: "pending", label: "ממתין" },
       { value: "in_progress", label: "בדרך" },
       { value: "delivered", label: "נמסר" },
@@ -336,6 +502,7 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
 
   const rows = sheetsData.table.rows;
   const deliveries = [];
+  const customerGroups: Record<string, any[]> = {};
   
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -371,6 +538,12 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
     };
 
     deliveries.push(delivery);
+    
+    // Group by customer name
+    if (!customerGroups[name]) {
+      customerGroups[name] = [];
+    }
+    customerGroups[name].push(delivery);
 
     // Prepare database record
     const dbRecord = {
@@ -432,10 +605,18 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
       },
       { onConflict: 'sheet_url' }
     );
+    
+  // Get unique status options
+  const statusOptions = await fetchStatusOptionsFromSheets(`https://docs.google.com/spreadsheets/d/${extractSheetId(sheetsData)}`);
 
   return {
     deliveries,
     columnMap,
+    customerGroups: Object.keys(customerGroups).map(name => ({
+      name,
+      count: customerGroups[name].length
+    })),
+    statusOptions,
     count: deliveries.length
   };
 }
