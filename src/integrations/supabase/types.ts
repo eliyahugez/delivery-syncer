@@ -26,34 +26,73 @@ export type Database = {
       }
       deliveries: {
         Row: {
-          created_at: string
-          id: number
+          address: string | null
+          assigned_to: string | null
+          created_at: string | null
+          external_id: string | null
+          id: string
+          name: string | null
+          phone: string | null
+          scan_date: string | null
+          status: string | null
+          status_date: string | null
+          tracking_number: string
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
-          id?: number
+          address?: string | null
+          assigned_to?: string | null
+          created_at?: string | null
+          external_id?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          scan_date?: string | null
+          status?: string | null
+          status_date?: string | null
+          tracking_number: string
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
-          id?: number
+          address?: string | null
+          assigned_to?: string | null
+          created_at?: string | null
+          external_id?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          scan_date?: string | null
+          status?: string | null
+          status_date?: string | null
+          tracking_number?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
       delivery_history: {
         Row: {
-          created_at: string
-          delivery_id: number | null
-          id: number
+          courier: string | null
+          delivery_id: string | null
+          id: string
+          notes: string | null
+          status: string
+          timestamp: string | null
         }
         Insert: {
-          created_at?: string
-          delivery_id?: number | null
-          id?: number
+          courier?: string | null
+          delivery_id?: string | null
+          id?: string
+          notes?: string | null
+          status: string
+          timestamp?: string | null
         }
         Update: {
-          created_at?: string
-          delivery_id?: number | null
-          id?: number
+          courier?: string | null
+          delivery_id?: string | null
+          id?: string
+          notes?: string | null
+          status?: string
+          timestamp?: string | null
         }
         Relationships: [
           {
@@ -70,7 +109,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      debug_table_columns: {
+        Args: {
+          table_name: string
+        }
+        Returns: {
+          column_name: string
+          data_type: string
+        }[]
+      }
     }
     Enums: {
       delivery_status: "pending" | "in_progress" | "completed" | "failed"

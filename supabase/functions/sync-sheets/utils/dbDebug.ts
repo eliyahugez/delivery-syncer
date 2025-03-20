@@ -3,12 +3,9 @@
 
 export async function getTableColumns(supabase: any, tableName: string) {
   try {
-    // Query the information schema to get column information
+    // Use our custom function to get column info instead of querying information_schema directly
     const { data, error } = await supabase
-      .from('information_schema.columns')
-      .select('column_name, data_type')
-      .eq('table_name', tableName)
-      .eq('table_schema', 'public');
+      .rpc('debug_table_columns', { table_name: tableName });
       
     if (error) {
       console.error(`Error getting column info for ${tableName}:`, error);

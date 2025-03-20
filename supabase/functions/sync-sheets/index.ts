@@ -16,20 +16,39 @@ serve(async (req) => {
   try {
     console.log("Edge function called");
     
-    // Verify supabase client is initialized with service role key
-    if (!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
+    // Verify supabase client is initialized
+    if (!Deno.env.get("SUPABASE_URL") || !Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
       return new Response(
-        JSON.stringify({ error: 'Supabase service role key not configured' }),
+        JSON.stringify({ 
+          error: 'Supabase configuration error',
+          details: 'Missing required environment variables'
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
     // For debugging and tracing
     console.log("Supabase URL:", Deno.env.get("SUPABASE_URL"));
-    await verifyDatabaseSchema(supabase);
+    
+    // Check database schema
+    try {
+      await verifyDatabaseSchema(supabase);
+    } catch (dbError) {
+      console.error("Database verification error:", dbError);
+      // Continue anyway as we don't want this to block functionality
+    }
     
     // Parse request body
-    const reqBody = await req.json();
+    let reqBody;
+    try {
+      reqBody = await req.json();
+    } catch (jsonError) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     const { sheetsUrl, action, deliveryId, newStatus, updateType } = reqBody;
 
     console.log("Request body:", JSON.stringify(reqBody, null, 2));
@@ -53,7 +72,7 @@ serve(async (req) => {
       );
     }
     
-    // For fetching status options - enhanced to better handle Hebrew and matching against sheets
+    // For fetching status options
     if (action === "getStatusOptions") {
       const result = await handleStatusOptionsRequest(sheetsUrl);
       return new Response(

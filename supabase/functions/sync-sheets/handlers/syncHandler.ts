@@ -7,18 +7,47 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
   console.log("Processing Google Sheets URL:", sheetsUrl);
 
   // First check database schema to verify connectivity
-  const deliveriesColumns = await getTableColumns(supabase, 'deliveries');
-  if (!deliveriesColumns) {
+  try {
+    const deliveriesColumns = await getTableColumns(supabase, 'deliveries');
+    console.log("Deliveries columns:", deliveriesColumns);
+    
+    if (!deliveriesColumns || deliveriesColumns.length === 0) {
+      return {
+        status: 500,
+        body: { 
+          error: 'Database schema verification failed', 
+          details: 'Could not retrieve database table structure. Check permissions and configuration.' 
+        }
+      };
+    }
+    
+    // Check for required columns
+    const requiredColumns = ['id', 'tracking_number', 'status', 'name'];
+    const columnNames = deliveriesColumns.map(col => col.column_name);
+    
+    const missingColumns = requiredColumns.filter(col => !columnNames.includes(col));
+    if (missingColumns.length > 0) {
+      return {
+        status: 500,
+        body: { 
+          error: 'Database schema is missing required columns', 
+          details: `Missing columns: ${missingColumns.join(', ')}` 
+        }
+      };
+    }
+    
+    console.log("Database schema verified successfully");
+  } catch (dbError) {
+    console.error("Error verifying database schema:", dbError);
     return {
       status: 500,
       body: { 
-        error: 'אין גישה לבסיס הנתונים', 
-        details: 'לא ניתן לוודא את מבנה בסיס הנתונים. בדוק הרשאות ותצורת Supabase.' 
+        error: 'שגיאה בגישה לבסיס הנתונים', 
+        details: 'בדוק הרשאות ותצורת Supabase.',
+        originalError: dbError.message
       }
     };
   }
-
-  console.log("Database schema verified, deliveries columns:", deliveriesColumns);
 
   // Validate input
   if (!sheetsUrl || sheetsUrl.trim() === "") {
@@ -68,14 +97,6 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
     // Process the data and save to Supabase
     const result = await processAndSaveData(response, supabase);
 
-    // If we have status updates pending, process them now
-    if (result.pendingStatusUpdates && result.pendingStatusUpdates.length > 0) {
-      console.log(`Processing ${result.pendingStatusUpdates.length} pending status updates`);
-      
-      // This would be implemented in a separate function if needed
-      // await processPendingStatusUpdates(result.pendingStatusUpdates, supabase);
-    }
-
     return {
       status: 200,
       body: result
@@ -95,7 +116,7 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
       errorDetails = 'בדוק את חיבור האינטרנט שלך ונסה שוב.';
     } else if (error.message?.includes("column") && error.message?.includes("does not exist")) {
       errorMessage = 'מבנה טבלה לא תקין';
-      errorDetails = 'חסרות עמודות נדרשות בטבלה. בדוק את מבנה הטבלה.';
+      errorDetails = 'חסרות עמודות נדרשות בטבלה או במסד הנתונים. בדוק את מבנה הטבלה.';
     }
     
     // Enhanced error object to provide more details to the client

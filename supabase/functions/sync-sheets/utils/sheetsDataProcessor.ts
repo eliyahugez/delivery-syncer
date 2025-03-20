@@ -11,8 +11,10 @@ export async function processAndSaveData(sheetsData: any, supabase: any) {
   
   // Verify database schema before starting
   const deliveriesColumns = await getTableColumns(supabase, 'deliveries');
-  if (!deliveriesColumns) {
-    throw new Error('Cannot access database schema. Check Supabase permissions and configuration.');
+  console.log("Deliveries columns:", deliveriesColumns);
+  
+  if (!deliveriesColumns || deliveriesColumns.length === 0) {
+    throw new Error('Cannot access database schema or table structure is invalid. Check Supabase permissions and configuration.');
   }
   
   console.log("Database schema verified, proceeding with data processing");

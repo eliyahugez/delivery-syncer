@@ -323,7 +323,7 @@ export async function saveDeliveryToDatabase(
     return { 
       success: false, 
       error: `Database operation failed: ${error.message}`, 
-      id: dbRecord.id 
+      id: deliveryData.dbRecord.id 
     };
   }
 }
