@@ -121,6 +121,17 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
       <Button onClick={handleSaveClick} disabled={isSaving}>
         {isSaving ? "שומר..." : "שמור קישור"}
       </Button>
+      
+      {urlInput && isValidSheetUrl(urlInput) && (
+        <Button 
+          variant="outline" 
+          type="button" 
+          onClick={onSync}
+          className="mt-2"
+        >
+          סנכרן עכשיו עם כוח (Force Refresh)
+        </Button>
+      )}
     </div>
   );
 };

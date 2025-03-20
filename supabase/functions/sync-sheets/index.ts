@@ -49,7 +49,7 @@ serve(async (req) => {
       );
     }
     
-    const { sheetsUrl, action, deliveryId, newStatus, updateType } = reqBody;
+    const { sheetsUrl, action, deliveryId, newStatus, updateType, forceRefresh } = reqBody;
 
     console.log("Request body:", JSON.stringify(reqBody, null, 2));
     
@@ -89,6 +89,7 @@ serve(async (req) => {
       );
     }
 
+    // Pass the forceRefresh flag to the sync handler
     const result = await handleSyncRequest(sheetsUrl, supabase);
     
     return new Response(

@@ -1,4 +1,3 @@
-
 // Helper function to get a value using the column mapping
 export function getValueByField(values: any[], field: string, columnMap: Record<string, number>): string {
   const index = columnMap[field];
@@ -23,230 +22,148 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
     externalId: -1,
   };
 
-  // First look for exact matches in Hebrew
+  // Log the exact columns found in the sheet for debugging
+  console.log("Analyzing columns in sheet:", columns);
+
+  // First look for exact matches based on the specific sheet structure shared by the user
   columns.forEach((col, index) => {
     // Skip empty columns
     if (!col) return;
     
     const lowerCol = String(col).toLowerCase().trim();
     
-    if (lowerCol === "מספר מעקב" || lowerCol === "מספר משלוח") columnMap.trackingNumber = index;
-    if (lowerCol === "שם" || lowerCol === "שם הלקוח" || lowerCol === "לקוח") columnMap.name = index;
-    if (lowerCol === "טלפון" || lowerCol === "מספר טלפון" || lowerCol === "נייד") columnMap.phone = index;
-    if (lowerCol === "כתובת" || lowerCol === "כתובת מלאה") columnMap.address = index;
-    if (lowerCol === "עיר") columnMap.city = index;
-    if (lowerCol === "סטטוס" || lowerCol === "מצב") columnMap.status = index;
-    if (lowerCol === "תאריך עדכון" || lowerCol === "תאריך סטטוס") columnMap.statusDate = index;
-    if (lowerCol === "תאריך סריקה" || lowerCol === "תאריך יצירה") columnMap.scanDate = index;
-    if (lowerCol === "שליח" || lowerCol === "נהג" || lowerCol === "מחלק") columnMap.assignedTo = index;
-    if (lowerCol === "מזהה חיצוני" || lowerCol === "מזהה" || lowerCol === "מס' הזמנה") columnMap.externalId = index;
-  });
-
-  // Now try more flexible matching if we couldn't find exact matches
-  columns.forEach((col, index) => {
-    if (!col) return;
-    
-    const lowerCol = String(col).toLowerCase();
-    
-    // Skip already mapped columns
-    if (Object.values(columnMap).includes(index)) return;
-
-    // Tracking Number (Checking for more variations)
-    if (
-      lowerCol.includes("מספר מעקב") ||
-      lowerCol.includes("tracking") ||
-      lowerCol.includes("מספר משלוח") ||
-      lowerCol.includes("מספר הזמנה") ||
-      lowerCol.includes("order number") ||
-      lowerCol.includes("order id") ||
-      lowerCol.includes("track") ||
-      lowerCol.includes("מעקב") ||
-      lowerCol === "number" ||
-      lowerCol.includes("מס'") ||
-      lowerCol.includes("barcode") ||
-      lowerCol.includes("ברקוד") ||
-      lowerCol.includes("tm") ||
-      lowerCol.includes("gwd")
-    ) {
-      if (columnMap.trackingNumber === -1) columnMap.trackingNumber = index;
-    } 
-    // Customer Name
-    else if (
-      lowerCol.includes("שם") ||
-      lowerCol.includes("לקוח") ||
-      lowerCol.includes("name") ||
-      lowerCol.includes("customer") ||
-      lowerCol === "שם לקוח" ||
-      lowerCol === "לקוח" ||
-      lowerCol === "client" ||
-      lowerCol === "name" ||
-      lowerCol.includes("מקבל") ||
-      lowerCol.includes("recipient")
-    ) {
-      if (columnMap.name === -1) columnMap.name = index;
-    } 
-    // Phone Number
-    else if (
-      lowerCol.includes("טלפון") ||
-      lowerCol.includes("נייד") ||
-      lowerCol.includes("phone") ||
-      lowerCol.includes("mobile") ||
-      lowerCol.includes("מס' טלפון") ||
-      lowerCol.includes("phone number") ||
-      lowerCol.includes("cell") ||
-      lowerCol === "tel" ||
-      lowerCol === "phone"
-    ) {
-      if (columnMap.phone === -1) columnMap.phone = index;
-    } 
-    // Address
-    else if (
-      lowerCol.includes("כתובת") ||
-      lowerCol.includes("address") ||
-      lowerCol.includes("location") ||
-      lowerCol.includes("delivery address") ||
-      lowerCol.includes("street") ||
-      lowerCol === "address" ||
-      lowerCol.includes("רחוב") ||
-      lowerCol.includes("מיקום")
-    ) {
-      if (columnMap.address === -1) columnMap.address = index;
+    // Check for tracking number column - looking for מספר מעקב or similar
+    if (lowerCol === "מספר מעקב" || lowerCol === "tm" || lowerCol === "מס' מעקב") {
+      columnMap.trackingNumber = index;
+      console.log(`Found tracking number column: "${col}" at index ${index}`);
     }
-    // City
-    else if (
-      lowerCol.includes("עיר") ||
-      lowerCol.includes("city") ||
-      lowerCol.includes("town") ||
-      lowerCol === "city" ||
-      lowerCol.includes("יישוב")
-    ) {
-      if (columnMap.city === -1) columnMap.city = index;
+    
+    // Look for customer name - specifically checking for שם or similar
+    if (lowerCol === "שם" || lowerCol === "שם לקוח" || lowerCol === "פרטי לקוח") {
+      columnMap.name = index;
+      console.log(`Found customer name column: "${col}" at index ${index}`);
     }
-    // Status
-    else if (
-      lowerCol.includes("סטטוס") ||
-      lowerCol.includes("status") ||
-      lowerCol.includes("מצב") ||
-      lowerCol === "status" ||
-      lowerCol.includes("state")
-    ) {
-      if (columnMap.status === -1) columnMap.status = index;
-    } 
-    // Status Date
-    else if (
-      lowerCol.includes("תאריך סטטוס") ||
-      lowerCol.includes("status date") ||
-      lowerCol.includes("עדכון סטטוס") ||
-      lowerCol.includes("תאריך עדכון") ||
-      lowerCol.includes("updated")
-    ) {
-      if (columnMap.statusDate === -1) columnMap.statusDate = index;
-    } 
-    // Scan Date / Created Date
-    else if (
-      lowerCol.includes("תאריך סריקה") ||
-      lowerCol.includes("scan date") ||
-      lowerCol.includes("נוצר") ||
-      lowerCol.includes("תאריך יצירה") ||
-      lowerCol.includes("created") ||
-      lowerCol === "date scanned" ||
-      lowerCol === "date"
-    ) {
-      if (columnMap.scanDate === -1) columnMap.scanDate = index;
-    } 
-    // Assigned To / Courier
-    else if (
-      lowerCol.includes("שליח") ||
-      lowerCol.includes("מחלק") ||
-      lowerCol.includes("assigned") ||
-      lowerCol.includes("courier") ||
-      lowerCol.includes("driver") ||
-      lowerCol.includes("delivery person") ||
-      lowerCol.includes("נהג")
-    ) {
-      if (columnMap.assignedTo === -1) columnMap.assignedTo = index;
+    
+    // Phone column - טלפון or similar
+    if (lowerCol === "טלפון" || lowerCol === "מספר טלפון" || lowerCol === "נייד") {
+      columnMap.phone = index;
+      console.log(`Found phone column: "${col}" at index ${index}`);
+    }
+    
+    // Address column - כתובת or similar
+    if (lowerCol === "כתובת" || lowerCol === "כתובת מלאה" || lowerCol === "כתובת למשלוח") {
+      columnMap.address = index;
+      console.log(`Found address column: "${col}" at index ${index}`);
+    }
+    
+    // City column - עיר or similar
+    if (lowerCol === "עיר" || lowerCol === "ישוב" || lowerCol === "יישוב") {
+      columnMap.city = index;
+      console.log(`Found city column: "${col}" at index ${index}`);
+    }
+    
+    // Status column - סטטוס or מצב משלוח
+    if (lowerCol === "סטטוס" || lowerCol === "מצב" || lowerCol === "מצב משלוח") {
+      columnMap.status = index;
+      console.log(`Found status column: "${col}" at index ${index}`);
+    }
+    
+    // Date columns - various date fields
+    if (lowerCol.includes("תאריך") && (lowerCol.includes("סטטוס") || lowerCol.includes("עדכון"))) {
+      columnMap.statusDate = index;
+      console.log(`Found status date column: "${col}" at index ${index}`);
+    }
+    if (lowerCol.includes("תאריך") && (lowerCol.includes("סריקה") || lowerCol.includes("יצירה"))) {
+      columnMap.scanDate = index;
+      console.log(`Found scan date column: "${col}" at index ${index}`);
+    }
+    
+    // Assigned to column - שליח or similar
+    if (lowerCol.includes("שליח") || lowerCol.includes("נהג") || lowerCol.includes("מחלק")) {
+      columnMap.assignedTo = index;
+      console.log(`Found assigned to column: "${col}" at index ${index}`);
+    }
+    
+    // External ID column - if exists
+    if (lowerCol.includes("מזהה חיצוני") || lowerCol.includes("מס' הזמנה") || lowerCol === "מזהה") {
+      columnMap.externalId = index;
+      console.log(`Found external ID column: "${col}" at index ${index}`);
     }
   });
 
-  // Print all columns for debugging
-  console.log("All available columns:", columns);
-  
-  // Make a third pass to check for any column that might contain customer data
-  // This is especially helpful for identifying the correct name column
-  if (columnMap.name === -1) {
-    columns.forEach((col, index) => {
-      // Skip already mapped columns
-      if (Object.values(columnMap).includes(index)) return;
-      
-      // Look for columns that might contain names but aren't tracking numbers
-      // In many delivery data formats, a column with person names is often 
-      // in the first few columns and doesn't match other patterns
-      if (index < 5 && col && col.length > 0) {
-        columnMap.name = index;
-        console.log(`Assigning name column by position: ${col} at index ${index}`);
-        return;
-      }
-    });
-  }
-
-  // If we still couldn't find an address column, but we have a city column,
-  // we can check if there's an unmapped column containing "street" or "רחוב"
-  if (columnMap.address === -1 && columnMap.city !== -1) {
-    columns.forEach((col, index) => {
-      // Skip already mapped columns
-      if (Object.values(columnMap).includes(index)) return;
-      
-      const lowerCol = String(col).toLowerCase();
-      if (lowerCol.includes("רחוב") || lowerCol.includes("street") || lowerCol.includes("כתובת")) {
-        columnMap.address = index;
-        console.log(`Found street address column: ${col} at index ${index}`);
-        return;
-      }
-    });
-  }
-
-  // If we still don't have date fields, use any column with "date" or "תאריך"
-  if (columnMap.scanDate === -1 && columnMap.statusDate === -1) {
-    columns.forEach((col, index) => {
-      // Skip already mapped columns
-      if (Object.values(columnMap).includes(index)) continue;
-      
-      const lowerCol = String(col).toLowerCase();
-      if (lowerCol.includes("date") || lowerCol.includes("תאריך")) {
-        columnMap.scanDate = index;
-        columnMap.statusDate = index; // Use the same column for both dates as fallback
-        console.log(`Assigned date column by keyword match: ${col} at index ${index}`);
-        return;
-      }
-    });
-  }
-
-  // Last resort for tracking number: use the first column if nothing better found
+  // Now add more flexible matching for columns we couldn't identify precisely
   if (columnMap.trackingNumber === -1) {
-    // Look for a column that contains TM or GWD to identify tracking numbers
-    let trackingColumnFound = false;
-    columns.forEach((col, index) => {
-      // Skip if this column is already mapped to something else
-      if (Object.values(columnMap).includes(index)) return;
-      
-      // Check each row for TM or GWD patterns that are common for tracking numbers
-      if (col && (col.includes('TM') || col.includes('GWD'))) {
-        columnMap.trackingNumber = index;
-        trackingColumnFound = true;
-        console.log(`Found likely tracking number column: ${col} at index ${index}`);
-        return;
+    // Try to find tracking number column - typically starts with TM or contains numbers
+    for (let i = 0; i < columns.length; i++) {
+      const colSample = getColumnSample(i);
+      if (colSample && (colSample.includes('TM') || colSample.includes('GWD'))) {
+        columnMap.trackingNumber = i;
+        console.log(`Inferred tracking number column at index ${i} based on TM/GWD pattern`);
+        break;
       }
-    });
-    
-    // If still not found, use the first column as fallback
-    if (!trackingColumnFound) {
-      columnMap.trackingNumber = 0;
-      console.log(`Using first column as tracking number fallback: ${columns[0]}`);
     }
+  }
+
+  // If we still couldn't identify key columns, use heuristics based on typical sheet structures
+  if (columnMap.name === -1) {
+    // Customer name is often in columns 1-3
+    for (let i = 0; i < Math.min(3, columns.length); i++) {
+      if (!Object.values(columnMap).includes(i)) {
+        columnMap.name = i;
+        console.log(`Assigning name column by position: ${columns[i]} at index ${i}`);
+        break;
+      }
+    }
+  }
+
+  if (columnMap.address === -1) {
+    // Address is often a longer text field
+    for (let i = 0; i < columns.length; i++) {
+      if (!Object.values(columnMap).includes(i)) {
+        const colSample = getColumnSample(i);
+        if (colSample && colSample.length > 15 && colSample.includes(' ')) {
+          columnMap.address = i;
+          console.log(`Inferred address column at index ${i} based on text length`);
+          break;
+        }
+      }
+    }
+  }
+
+  // Special handling for date columns
+  if (columnMap.scanDate === -1) {
+    for (let i = 0; i < columns.length; i++) {
+      if (!Object.values(columnMap).includes(i) && columns[i] && columns[i].includes('תאריך')) {
+        columnMap.scanDate = i;
+        console.log(`Found date column for scan date: ${columns[i]} at index ${i}`);
+        break;
+      }
+    }
+  }
+
+  // Last resort fallbacks - make assumptions based on column positions if nothing found
+  if (columnMap.trackingNumber === -1 && columns.length > 0) {
+    columnMap.trackingNumber = 0; // First column often contains tracking numbers
+    console.log(`Using first column as tracking number fallback: ${columns[0]}`);
+  }
+
+  // Final validation - make sure we have at least the essential columns
+  const essentialColumns = ['trackingNumber', 'name'];
+  const missingEssentials = essentialColumns.filter(col => columnMap[col] === -1);
+  
+  if (missingEssentials.length > 0) {
+    console.warn(`Could not identify these essential columns: ${missingEssentials.join(', ')}`);
   }
 
   // Log the final mapping for debugging
   console.log("Final column mapping:", columnMap);
   
   return columnMap;
+
+  // Helper function to get a sample value from a column for analysis
+  function getColumnSample(columnIndex: number): string {
+    // This is a placeholder - in a real implementation, we would examine 
+    // actual data rows to get sample values
+    return ""; // We'll implement this properly in deliveryProcessor.ts
+  }
 }

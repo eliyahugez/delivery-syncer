@@ -10,7 +10,7 @@ export function useFetchDeliveries(isOnline: boolean) {
   const { toast } = useToast();
   
   // Fetch deliveries from server or cache
-  const fetchDeliveries = useCallback(async (sheetsUrl: string): Promise<{
+  const fetchDeliveries = useCallback(async (sheetsUrl: string, forceRefresh = false): Promise<{
     deliveries: Delivery[];
     statusOptions: any[];
     lastSyncTime: Date | null;
@@ -80,7 +80,7 @@ export function useFetchDeliveries(isOnline: boolean) {
           const response = await supabase.functions.invoke("sync-sheets", {
             body: { 
               sheetsUrl: cleanedUrl,
-              forceRefresh: true // Add this to force refresh data and bypass caching
+              forceRefresh: forceRefresh // Pass the forceRefresh flag
             }
           });
           

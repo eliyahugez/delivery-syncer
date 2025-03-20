@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { Delivery } from "@/types/delivery";
 import { useAuth } from "@/context/AuthContext";
@@ -48,7 +49,7 @@ export function useDeliveryData() {
   };
 
   // Load deliveries
-  const loadDeliveries = async () => {
+  const loadDeliveries = async (forceRefresh = false) => {
     if (!user?.sheetsUrl) {
       setIsLoading(false);
       setError("לא הוגדר קישור לטבלה. אנא הגדר קישור בהגדרות המשתמש.");
@@ -63,7 +64,7 @@ export function useDeliveryData() {
       
       // Try to fetch from Supabase edge function
       const { deliveries: fetchedDeliveries, statusOptions, lastSyncTime } = 
-        await fetchDeliveries(user.sheetsUrl)
+        await fetchDeliveries(user.sheetsUrl, forceRefresh)
           .catch(err => {
             console.error("Error fetching deliveries from edge function:", err);
             
@@ -78,26 +79,42 @@ export function useDeliveryData() {
             throw err;
           });
       
-      // Enhance phone numbers to international format if needed
-      const enhancedDeliveries = fetchedDeliveries.map(delivery => ({
-        ...delivery,
-        phone: formatPhoneNumber(delivery.phone),
-        // Ensure customer name is not empty or just the tracking number
-        name: delivery.name && delivery.name !== delivery.trackingNumber 
-          ? delivery.name 
-          : "לקוח " + delivery.trackingNumber
-      }));
+      // Process dates in name field if needed
+      const processedDeliveries = fetchedDeliveries.map(delivery => {
+        let processedName = delivery.name;
+        
+        // Check if name is in Date() format and convert it
+        if (typeof processedName === 'string' && processedName.startsWith('Date(') && processedName.endsWith(')')) {
+          try {
+            const dateString = processedName.substring(5, processedName.length - 1);
+            const [year, month, day] = dateString.split(',').map(Number);
+            processedName = `${day}/${month + 1}/${year}`;
+          } catch (e) {
+            console.error("Error parsing date in name:", processedName, e);
+          }
+        }
+        
+        return {
+          ...delivery,
+          name: processedName,
+          phone: formatPhoneNumber(delivery.phone),
+          // Ensure customer name is not empty or just the tracking number
+          name: processedName && processedName !== delivery.trackingNumber 
+            ? processedName 
+            : "לקוח " + delivery.trackingNumber
+        };
+      });
       
-      console.log("Loaded deliveries:", enhancedDeliveries.slice(0, 3));
+      console.log("Loaded deliveries:", processedDeliveries.slice(0, 3));
       
       // Log the first few items for debugging
-      console.log("Customer groups:", enhancedDeliveries.slice(0, 5).map(d => ({
+      console.log("Customer groups:", processedDeliveries.slice(0, 5).map(d => ({
         name: d.name,
         tracking: d.trackingNumber,
         phone: d.phone
       })));
       
-      setDeliveries(enhancedDeliveries);
+      setDeliveries(processedDeliveries);
       setError(null);
       
       if (statusOptions && statusOptions.length > 0) {
