@@ -1,9 +1,24 @@
 
 import { extractSheetId, fetchSheetsData } from "../utils/sheetUtils.ts";
 import { processAndSaveData } from "../utils/sheetsDataProcessor.ts";
+import { getTableColumns } from "../utils/dbDebug.ts";
 
 export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
   console.log("Processing Google Sheets URL:", sheetsUrl);
+
+  // First check database schema to verify connectivity
+  const deliveriesColumns = await getTableColumns(supabase, 'deliveries');
+  if (!deliveriesColumns) {
+    return {
+      status: 500,
+      body: { 
+        error: 'אין גישה לבסיס הנתונים', 
+        details: 'לא ניתן לוודא את מבנה בסיס הנתונים. בדוק הרשאות ותצורת Supabase.' 
+      }
+    };
+  }
+
+  console.log("Database schema verified, deliveries columns:", deliveriesColumns);
 
   // Validate input
   if (!sheetsUrl || sheetsUrl.trim() === "") {

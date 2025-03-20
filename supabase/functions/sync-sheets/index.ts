@@ -1,10 +1,11 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { corsHeaders } from "./utils/corsHeaders.ts";
 import { handleSingleStatusUpdate } from "./handlers/updateStatusHandler.ts";
 import { handleStatusOptionsRequest } from "./handlers/statusOptionsHandler.ts";
 import { handleSyncRequest } from "./handlers/syncHandler.ts";
+import { supabase } from "./supabase.ts";
+import { verifyDatabaseSchema } from "./utils/dbDebug.ts";
 
 serve(async (req) => {
   // Handle CORS
@@ -13,23 +14,25 @@ serve(async (req) => {
   }
 
   try {
-    const reqBody = await req.json();
-    const { sheetsUrl, action, deliveryId, newStatus, updateType } = reqBody;
-
-    console.log("Request body:", JSON.stringify(reqBody, null, 2));
-
-    // Create a Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    console.log("Edge function called");
     
-    if (!supabaseUrl || !supabaseServiceKey) {
+    // Verify supabase client is initialized with service role key
+    if (!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
       return new Response(
-        JSON.stringify({ error: 'Supabase credentials not configured on the server' }),
+        JSON.stringify({ error: 'Supabase service role key not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // For debugging and tracing
+    console.log("Supabase URL:", Deno.env.get("SUPABASE_URL"));
+    await verifyDatabaseSchema(supabase);
+    
+    // Parse request body
+    const reqBody = await req.json();
+    const { sheetsUrl, action, deliveryId, newStatus, updateType } = reqBody;
+
+    console.log("Request body:", JSON.stringify(reqBody, null, 2));
     
     // For status update action
     if (action === "updateStatus") {

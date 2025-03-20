@@ -180,23 +180,46 @@ export async function processDeliveryRow(
       external_id: externalId
     };
 
-    // Check if this tracking number already exists in the database
-    const { data: existingDelivery, error: lookupError } = await supabase
-      .from('deliveries')
-      .select('id')
-      .eq('tracking_number', finalTrackingNumber)
-      .maybeSingle();
+    // Check if this tracking number already exists in the database - fix the query to match schema
+    try {
+      const { data: existingDelivery, error: lookupError } = await supabase
+        .from('deliveries')
+        .select('id')
+        .eq('tracking_number', finalTrackingNumber)
+        .maybeSingle();
+        
+      if (lookupError) {
+        console.error(`Error checking for existing delivery with tracking number ${finalTrackingNumber}:`, lookupError);
+        
+        // Enhanced error logging for debugging
+        if (lookupError.code === "42703") {
+          // Column does not exist error - log table structure
+          const { data: tableInfo, error: tableError } = await supabase
+            .rpc('debug_table_columns', { table_name: 'deliveries' })
+            .select();
+            
+          if (!tableError && tableInfo) {
+            console.log("Deliveries table columns:", tableInfo);
+          } else {
+            console.log("Unable to get table structure:", tableError);
+          }
+        }
+      }
       
-    if (lookupError) {
-      console.error(`Error checking for existing delivery with tracking number ${finalTrackingNumber}:`, lookupError);
+      return {
+        delivery,
+        dbRecord,
+        isNew: !existingDelivery,
+        existingId: existingDelivery?.id
+      };
+    } catch (error) {
+      console.error(`DB query error for tracking number ${finalTrackingNumber}:`, error);
+      return {
+        delivery,
+        dbRecord,
+        isNew: true // Assume new if we can't determine
+      };
     }
-    
-    return {
-      delivery,
-      dbRecord,
-      isNew: !existingDelivery,
-      existingId: existingDelivery?.id
-    };
   } catch (error: any) {
     return {
       delivery: null,
@@ -211,17 +234,39 @@ export async function saveDeliveryToDatabase(
   deliveryData: { delivery: any, dbRecord: any, isNew?: boolean, existingId?: string },
   supabase: any
 ): Promise<{ success: boolean, error?: string, id: string }> {
-  const { delivery, dbRecord, isNew, existingId } = deliveryData;
-  
   try {
+    const { delivery, dbRecord, isNew, existingId } = deliveryData;
+    
+    // Add debugging
+    console.log(`Saving delivery: isNew=${isNew}, id=${existingId || dbRecord.id}`);
+    
     if (isNew) {
-      // Insert new delivery
-      const { error: insertError } = await supabase
+      // Insert new delivery with enhanced error handling
+      console.log("Inserting new delivery with data:", JSON.stringify(dbRecord, null, 2));
+      
+      const { data, error: insertError } = await supabase
         .from('deliveries')
-        .insert(dbRecord);
+        .insert(dbRecord)
+        .select();
         
       if (insertError) {
         console.error(`Error inserting delivery ${dbRecord.id}:`, insertError);
+        
+        // Try to diagnose common issues
+        if (insertError.code === "23505") {
+          return { 
+            success: false, 
+            error: `Duplicate key value: ${insertError.message}`, 
+            id: dbRecord.id 
+          };
+        } else if (insertError.code === "42703") {
+          return { 
+            success: false, 
+            error: `Column error: ${insertError.message}`, 
+            id: dbRecord.id 
+          };
+        }
+        
         return { 
           success: false, 
           error: `DB error: ${insertError.message}`, 
@@ -230,23 +275,25 @@ export async function saveDeliveryToDatabase(
       }
       
       // Create a history entry for new deliveries
-      const { error: historyError } = await supabase
+      await supabase
         .from('delivery_history')
         .insert({
           delivery_id: dbRecord.id,
           status: dbRecord.status,
           timestamp: new Date().toISOString(),
           courier: dbRecord.assigned_to
+        })
+        .then(({ error: historyError }) => {
+          if (historyError) {
+            console.error(`Error creating history for ${dbRecord.id}:`, historyError);
+          }
         });
-        
-      if (historyError) {
-        console.error(`Error creating history for ${dbRecord.id}:`, historyError);
-        // Don't fail the whole operation for history error
-      }
       
       return { success: true, id: dbRecord.id };
     } else {
       // Update the existing delivery
+      console.log("Updating existing delivery:", existingId);
+      
       const { error: updateError } = await supabase
         .from('deliveries')
         .update({
