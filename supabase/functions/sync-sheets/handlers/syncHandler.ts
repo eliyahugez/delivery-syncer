@@ -47,11 +47,13 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
   } catch (error: any) {
     console.error("Error fetching/processing sheets data:", error);
     
+    // Enhanced error object to provide more details to the client
     return {
       status: 500,
       body: { 
         error: error.message || 'Error processing Google Sheets data',
         details: error.details || null,
+        stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : null,
         spreadsheetId 
       }
     };

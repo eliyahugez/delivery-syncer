@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DeliveryTable from "@/components/deliveries/DeliveryTable";
 import DeliveryGroups from "@/components/deliveries/DeliveryGroups";
 import DeliveryImport from "@/components/deliveries/DeliveryImport";
+import SheetsUrlSetter from "@/components/settings/SheetsUrlSetter";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -113,6 +114,29 @@ const Dashboard = () => {
     }
   };
 
+  // Show the SheetsUrlSetter if no sheets URL is provided
+  if (!user?.sheetsUrl) {
+    return (
+      <div className="container mx-auto px-4 py-6">
+        <h1 className="text-3xl font-bold mb-6">לוח בקרת משלוחים</h1>
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-md mb-6">
+          <p className="font-medium">כדי להתחיל להשתמש במערכת, אנא הגדר קישור לטבלת Google Sheets:</p>
+        </div>
+        
+        <SheetsUrlSetter />
+        
+        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-md">
+          <p className="font-medium">הוראות:</p>
+          <ol className="list-decimal list-inside mt-2 space-y-1">
+            <li>ודא כי טבלת Google Sheets שלך מוגדרת כציבורית או משותפת עם הרשאות צפייה לכל מי שיש לו את הלינק</li>
+            <li>וודא שיש בטבלה לפחות עמודות עבור: מספר מעקב, שם לקוח, טלפון, כתובת וסטטוס</li>
+            <li>העתק את הלינק לטבלה והדבק אותו בשדה למעלה</li>
+          </ol>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-6">
       <header className="mb-8">
@@ -169,7 +193,7 @@ const Dashboard = () => {
               onClick={() => syncPendingUpdates()}
               disabled={pendingUpdates === 0 || !isOnline}
             >
-              <RefreshCw className="h-4 w-4" />
+              <CloudSun className="h-4 w-4" />
               עדכן סטטוסים
             </Button>
           </div>
@@ -179,6 +203,12 @@ const Dashboard = () => {
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6">
             <p className="font-medium">שגיאה בטעינת המשלוחים:</p>
             <p>{error}</p>
+            
+            {error.includes("לא הוגדר קישור לטבלה") && (
+              <div className="mt-4">
+                <SheetsUrlSetter />
+              </div>
+            )}
           </div>
         )}
         
