@@ -123,7 +123,7 @@ const Dashboard = () => {
           <p className="font-medium">כדי להתחיל להשתמש במערכת, אנא הגדר קישור לטבלת Google Sheets:</p>
         </div>
         
-        <SheetsUrlSetter />
+        <SheetsUrlSetter onSync={handleSync} />
         
         <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-md">
           <p className="font-medium">הוראות:</p>
@@ -206,7 +206,7 @@ const Dashboard = () => {
             
             {error.includes("לא הוגדר קישור לטבלה") && (
               <div className="mt-4">
-                <SheetsUrlSetter />
+                <SheetsUrlSetter onSync={handleSync} />
               </div>
             )}
           </div>

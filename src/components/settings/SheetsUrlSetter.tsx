@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { useUser } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { isValidSheetUrl, cleanSheetUrl } from '@/utils/sheetUrlUtils';
 
 interface SheetsUrlSetterProps {
@@ -11,7 +12,7 @@ interface SheetsUrlSetterProps {
 
 const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
   const { toast } = useToast();
-  const { user, updateUserProfile } = useUser();
+  const { user, updateUserProfile } = useAuth();
   const [urlInput, setUrlInput] = useState(user?.sheetsUrl || "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,6 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
     setError(null);
   };
   
-  // Update the toast variant - change from "success" (invalid) to "default"
   const handleSaveClick = async () => {
     setIsSaving(true);
     
@@ -56,7 +56,7 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
       toast({
         title: "הקישור נשמר בהצלחה",
         description: "ניתן עכשיו לסנכרן נתונים מהטבלה",
-        variant: "default",  // Changed from "success" to "default"
+        variant: "default",
       });
       
       onSync();
