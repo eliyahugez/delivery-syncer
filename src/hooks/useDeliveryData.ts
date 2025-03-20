@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { Delivery } from "@/types/delivery";
 import { useAuth } from "@/context/AuthContext";
@@ -94,14 +93,18 @@ export function useDeliveryData() {
           }
         }
         
+        // Format the phone number
+        const formattedPhone = formatPhoneNumber(delivery.phone);
+        
+        // Ensure customer name is not empty or just the tracking number
+        const finalName = processedName && processedName !== delivery.trackingNumber 
+          ? processedName 
+          : "לקוח " + delivery.trackingNumber;
+          
         return {
           ...delivery,
-          name: processedName,
-          phone: formatPhoneNumber(delivery.phone),
-          // Ensure customer name is not empty or just the tracking number
-          name: processedName && processedName !== delivery.trackingNumber 
-            ? processedName 
-            : "לקוח " + delivery.trackingNumber
+          name: finalName,
+          phone: formattedPhone
         };
       });
       
