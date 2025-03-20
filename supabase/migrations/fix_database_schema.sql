@@ -1,4 +1,11 @@
 
+-- Check if uuid extension is available
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Add tracking_number column if it doesn't exist
+ALTER TABLE IF EXISTS deliveries
+ADD COLUMN IF NOT EXISTS tracking_number text;
+
 -- הוספת עמודה external_id לטבלת deliveries
 ALTER TABLE IF EXISTS deliveries
 ADD COLUMN IF NOT EXISTS external_id text;
@@ -18,6 +25,7 @@ ALTER COLUMN id TYPE uuid USING (uuid_generate_v4());
 
 -- יצירת אינדקס על external_id בטבלת deliveries
 CREATE INDEX IF NOT EXISTS idx_deliveries_external_id ON deliveries(external_id);
+CREATE INDEX IF NOT EXISTS idx_deliveries_tracking_number ON deliveries(tracking_number);
 
 -- עדכון הרשאות
 ALTER TABLE IF EXISTS public.deliveries ENABLE ROW LEVEL SECURITY;

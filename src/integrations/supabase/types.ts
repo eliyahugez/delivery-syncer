@@ -11,97 +11,49 @@ export type Database = {
     Tables: {
       column_mappings: {
         Row: {
-          created_at: string | null
-          id: string
-          mappings: Json
-          sheet_url: string
-          user_id: string | null
+          created_at: string
+          id: number
         }
         Insert: {
-          created_at?: string | null
-          id?: string
-          mappings: Json
-          sheet_url: string
-          user_id?: string | null
+          created_at?: string
+          id?: number
         }
         Update: {
-          created_at?: string | null
-          id?: string
-          mappings?: Json
-          sheet_url?: string
-          user_id?: string | null
+          created_at?: string
+          id?: number
         }
         Relationships: []
       }
       deliveries: {
         Row: {
-          address: string | null
-          assigned_to: string | null
-          created_at: string | null
-          external_id: string | null
-          id: string
-          name: string | null
-          phone: string | null
-          scan_date: string | null
-          status: string
-          status_date: string | null
-          tracking_number: string
-          updated_at: string | null
+          created_at: string
+          id: number
         }
         Insert: {
-          address?: string | null
-          assigned_to?: string | null
-          created_at?: string | null
-          external_id?: string | null
-          id?: string
-          name?: string | null
-          phone?: string | null
-          scan_date?: string | null
-          status?: string
-          status_date?: string | null
-          tracking_number: string
-          updated_at?: string | null
+          created_at?: string
+          id?: number
         }
         Update: {
-          address?: string | null
-          assigned_to?: string | null
-          created_at?: string | null
-          external_id?: string | null
-          id?: string
-          name?: string | null
-          phone?: string | null
-          scan_date?: string | null
-          status?: string
-          status_date?: string | null
-          tracking_number?: string
-          updated_at?: string | null
+          created_at?: string
+          id?: number
         }
         Relationships: []
       }
       delivery_history: {
         Row: {
-          courier: string | null
-          delivery_id: string | null
-          id: string
-          note: string | null
-          status: string
-          timestamp: string | null
+          created_at: string
+          delivery_id: number | null
+          id: number
         }
         Insert: {
-          courier?: string | null
-          delivery_id?: string | null
-          id?: string
-          note?: string | null
-          status: string
-          timestamp?: string | null
+          created_at?: string
+          delivery_id?: number | null
+          id?: number
         }
         Update: {
-          courier?: string | null
-          delivery_id?: string | null
-          id?: string
-          note?: string | null
-          status?: string
-          timestamp?: string | null
+          created_at?: string
+          delivery_id?: number | null
+          id?: number
         }
         Relationships: [
           {

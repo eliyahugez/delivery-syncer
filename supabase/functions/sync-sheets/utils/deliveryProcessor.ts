@@ -15,7 +15,8 @@ export async function processDeliveryRow(
   delivery: any, 
   dbRecord: any, 
   error?: string,
-  isNew?: boolean 
+  isNew?: boolean,
+  existingId?: string
 }> {
   try {
     if (!row.c) {
@@ -93,6 +94,9 @@ export async function processDeliveryRow(
     const address = getValueByField(values, 'address', columnMap) || 'כתובת לא זמינה';
     const city = getValueByField(values, 'city', columnMap) || '';
     const assignedTo = getValueByField(values, 'assignedTo', columnMap) || 'לא שויך';
+    
+    // Get external ID if available (might be used for syncing with external systems)
+    const externalId = getValueByField(values, 'externalId', columnMap) || finalTrackingNumber;
 
     // Combine address and city if both exist
     const fullAddress = city && address ? `${address}, ${city}` : address;
@@ -110,7 +114,8 @@ export async function processDeliveryRow(
       name: customerName,
       phone,
       address: fullAddress,
-      assignedTo
+      assignedTo,
+      externalId
     };
 
     // Prepare database record
@@ -124,7 +129,7 @@ export async function processDeliveryRow(
       phone,
       address: fullAddress,
       assigned_to: assignedTo,
-      external_id: finalTrackingNumber
+      external_id: externalId
     };
 
     // Check if this tracking number already exists in the database
@@ -202,7 +207,8 @@ export async function saveDeliveryToDatabase(
           name: dbRecord.name,
           phone: dbRecord.phone,
           address: dbRecord.address,
-          assigned_to: dbRecord.assigned_to
+          assigned_to: dbRecord.assigned_to,
+          external_id: dbRecord.external_id
         })
         .eq('id', existingId);
         

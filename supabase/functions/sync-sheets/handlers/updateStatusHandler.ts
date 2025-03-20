@@ -1,23 +1,51 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { corsHeaders } from "../utils/corsHeaders.ts";
 import { extractSheetId } from "../utils/sheetUtils.ts";
+import { normalizeStatus } from "../utils/statusUtils.ts";
 
 // Function to handle status updates for a single delivery
-export async function handleSingleStatusUpdate(
+export async function handleStatusUpdate(
   supabase: any,
   deliveryId: string,
   newStatus: string,
-  sheetsUrl: string
+  updateType: string = "single",
+  sheetsUrl: string | null
 ) {
-  console.log(`Updating delivery ${deliveryId} to status ${newStatus}`);
+  console.log(`Updating delivery ${deliveryId} status to ${newStatus} (type: ${updateType})`);
+  
+  // Normalize the status to ensure consistency
+  const normalizedStatus = normalizeStatus(newStatus);
+  
+  try {
+    if (updateType === "batch") {
+      return await handleBatchStatusUpdate(supabase, deliveryId, normalizedStatus, sheetsUrl);
+    } else {
+      return await handleSingleStatusUpdate(supabase, deliveryId, normalizedStatus, sheetsUrl);
+    }
+  } catch (error: any) {
+    console.error("Error in handleStatusUpdate:", error);
+    return {
+      status: 500,
+      body: { error: error.message || "An unknown error occurred" }
+    };
+  }
+}
+
+// Function to handle status updates for a single delivery
+async function handleSingleStatusUpdate(
+  supabase: any,
+  deliveryId: string,
+  newStatus: string,
+  sheetsUrl: string | null
+) {
+  console.log(`Updating single delivery ${deliveryId} to status ${newStatus}`);
   
   // Get the delivery details
   const { data: delivery, error: fetchError } = await supabase
     .from('deliveries')
     .select('*')
     .eq('id', deliveryId)
-    .single();
+    .maybeSingle();
     
   if (fetchError || !delivery) {
     console.error('Error fetching delivery:', fetchError);
@@ -53,7 +81,7 @@ export async function handleSingleStatusUpdate(
     console.error('Error creating history entry:', historyError);
   }
   
-  // Update Google Sheets
+  // Update Google Sheets if a URL is provided
   if (sheetsUrl && delivery.tracking_number) {
     try {
       await updateGoogleSheets(sheetsUrl, delivery.tracking_number, newStatus);
@@ -69,11 +97,11 @@ export async function handleSingleStatusUpdate(
 }
 
 // Function to handle batch status updates for multiple deliveries
-export async function handleBatchStatusUpdate(
+async function handleBatchStatusUpdate(
   supabase: any,
   deliveryId: string,
   newStatus: string,
-  sheetsUrl: string
+  sheetsUrl: string | null
 ) {
   console.log(`Batch updating deliveries related to ${deliveryId} to status ${newStatus}`);
   
@@ -81,7 +109,7 @@ export async function handleBatchStatusUpdate(
     .from('deliveries')
     .select('name')
     .eq('id', deliveryId)
-    .single();
+    .maybeSingle();
     
   if (!delivery || !delivery.name) {
     return {

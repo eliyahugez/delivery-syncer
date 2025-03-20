@@ -32,6 +32,14 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
     // Process the data and save to Supabase
     const result = await processAndSaveData(response, supabase);
 
+    // If we have status updates pending, process them now
+    if (result.pendingStatusUpdates && result.pendingStatusUpdates.length > 0) {
+      console.log(`Processing ${result.pendingStatusUpdates.length} pending status updates`);
+      
+      // This would be implemented in a separate function if needed
+      // await processPendingStatusUpdates(result.pendingStatusUpdates, supabase);
+    }
+
     return {
       status: 200,
       body: result
