@@ -30,6 +30,7 @@ serve(async (req) => {
       }
 
       // Check if we need to batch update for this customer
+      
       if (updateType === "batch") {
         console.log(`Batch updating deliveries related to ${deliveryId} to status ${newStatus}`);
         const { data: delivery } = await supabase
@@ -140,9 +141,11 @@ serve(async (req) => {
       }
     }
     
-    // For fetching status options
+    // For fetching status options - enhanced to better handle Hebrew and matching against sheets
     if (action === "getStatusOptions") {
+      console.log("Fetching status options from sheet:", sheetsUrl);
       const statusOptions = await fetchStatusOptionsFromSheets(sheetsUrl);
+      console.log("Found status options:", JSON.stringify(statusOptions));
       return new Response(
         JSON.stringify({ statusOptions }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -226,7 +229,7 @@ async function fetchSheetsData(spreadsheetId: string): Promise<any> {
   }
 }
 
-// Function to fetch status options from the Google Sheet
+// Enhanced function to fetch status options from the Google Sheet
 async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
   try {
     console.log(`Fetching status options from: ${sheetsUrl}`);
@@ -248,6 +251,8 @@ async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
       const label = (col.label || "").toLowerCase();
       return label.includes("status") || label.includes("סטטוס") || label.includes("מצב");
     });
+
+    console.log(`Status column index: ${statusColumnIndex}`);
 
     if (statusColumnIndex === -1) {
       console.log('Status column not found, returning default options');
@@ -278,7 +283,13 @@ async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
     });
 
     console.log('Found status options:', options);
-    return options;
+    return options.length > 0 ? options : [
+      { value: "pending", label: "ממתין" },
+      { value: "in_progress", label: "בדרך" },
+      { value: "delivered", label: "נמסר" },
+      { value: "failed", label: "נכשל" },
+      { value: "returned", label: "הוחזר" }
+    ];
   } catch (error) {
     console.error('Error fetching status options:', error);
     // Return default options if there's an error
