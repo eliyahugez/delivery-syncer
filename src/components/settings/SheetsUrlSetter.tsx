@@ -36,6 +36,8 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
     } else if (value && isValidSheetUrl(value)) {
       const cleanedUrl = cleanSheetUrl(value);
       setFeedbackMessage(`מזהה גיליון תקין: ${cleanedUrl}`);
+    } else if (value) {
+      setFeedbackMessage("הקישור לא תואם את הפורמט הנדרש של Google Sheets");
     }
   };
   
