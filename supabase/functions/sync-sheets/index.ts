@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
@@ -13,7 +14,10 @@ serve(async (req) => {
   }
 
   try {
-    const { sheetsUrl, action, deliveryId, newStatus, updateType } = await req.json();
+    const reqBody = await req.json();
+    const { sheetsUrl, action, deliveryId, newStatus, updateType } = reqBody;
+
+    console.log("Request body:", JSON.stringify(reqBody, null, 2));
 
     // Create a Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -198,7 +202,9 @@ serve(async (req) => {
       );
     }
 
-    // Extract sheets ID from URL
+    console.log("Processing Google Sheets URL:", sheetsUrl);
+
+    // Extract sheets ID from URL - improved to handle various URL formats
     const spreadsheetId = extractSheetId(sheetsUrl);
     if (!spreadsheetId) {
       return new Response(
@@ -207,16 +213,30 @@ serve(async (req) => {
       );
     }
 
-    // Get Google Sheets data
-    const response = await fetchSheetsData(spreadsheetId);
-    
-    // Process the data and save to Supabase
-    const result = await processAndSaveData(response, supabase);
+    console.log("Extracted spreadsheet ID:", spreadsheetId);
 
-    return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // Get Google Sheets data
+    try {
+      const response = await fetchSheetsData(spreadsheetId);
+      
+      // Process the data and save to Supabase
+      const result = await processAndSaveData(response, supabase);
+  
+      return new Response(
+        JSON.stringify(result),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } catch (error) {
+      console.error("Error fetching/processing sheets data:", error);
+      
+      return new Response(
+        JSON.stringify({ 
+          error: error.message || 'Error processing Google Sheets data',
+          spreadsheetId 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
   } catch (error) {
     console.error('Error processing request:', error);
     
@@ -227,11 +247,49 @@ serve(async (req) => {
   }
 });
 
-// Helper function to extract sheet ID from URL
+// Helper function to extract sheet ID from URL - enhanced to handle more URL formats
 function extractSheetId(url: string): string | null {
-  const regex = /\/d\/([a-zA-Z0-9-_]+)/;
-  const match = url.match(regex);
-  return match ? match[1] : null;
+  console.log("Extracting sheet ID from URL:", url);
+  
+  // Handle different URL formats
+  try {
+    // Format: /d/{spreadsheetId}/
+    const regex1 = /\/d\/([a-zA-Z0-9-_]+)/;
+    const match1 = url.match(regex1);
+    if (match1 && match1[1]) {
+      console.log("Extracted using pattern 1:", match1[1]);
+      return match1[1];
+    }
+    
+    // Format: spreadsheets/d/{spreadsheetId}/
+    const regex2 = /spreadsheets\/d\/([a-zA-Z0-9-_]+)/;
+    const match2 = url.match(regex2);
+    if (match2 && match2[1]) {
+      console.log("Extracted using pattern 2:", match2[1]);
+      return match2[1];
+    }
+    
+    // Format: key={spreadsheetId}
+    const regex3 = /key=([a-zA-Z0-9-_]+)/;
+    const match3 = url.match(regex3);
+    if (match3 && match3[1]) {
+      console.log("Extracted using pattern 3:", match3[1]);
+      return match3[1];
+    }
+    
+    // Direct ID (if the user just provided the ID)
+    const directIdRegex = /^[a-zA-Z0-9-_]{25,45}$/;
+    if (directIdRegex.test(url)) {
+      console.log("URL appears to be a direct ID");
+      return url;
+    }
+    
+    console.log("No valid sheet ID pattern found in URL");
+    return null;
+  } catch (error) {
+    console.error("Error extracting sheet ID:", error);
+    return null;
+  }
 }
 
 // Function to fetch data from Google Sheets
@@ -241,29 +299,46 @@ async function fetchSheetsData(spreadsheetId: string): Promise<any> {
   
   console.log(`Fetching Google Sheets: ${apiUrl}`);
   
-  const response = await fetch(apiUrl);
-  
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Google Sheets: ${response.status} ${response.statusText}`);
-  }
-  
-  const text = await response.text();
-  
-  // Google's response is wrapped in a function call that we need to parse
-  const jsonStart = text.indexOf('{');
-  const jsonEnd = text.lastIndexOf('}') + 1;
-  
-  if (jsonStart < 0 || jsonEnd <= 0) {
-    throw new Error('Invalid response format from Google Sheets');
-  }
-  
-  const jsonString = text.substring(jsonStart, jsonEnd);
-  
   try {
-    return JSON.parse(jsonString);
+    const response = await fetch(apiUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch Google Sheets: ${response.status} ${response.statusText}`);
+    }
+    
+    const text = await response.text();
+    console.log("Response received, length:", text.length);
+    
+    // Check if we got an HTML error page instead of JSON
+    if (text.includes("<!DOCTYPE html>") || text.includes("<html>")) {
+      console.error("Received HTML instead of JSON data");
+      throw new Error("Invalid response format from Google Sheets (received HTML)");
+    }
+    
+    // Google's response is wrapped in a function call that we need to parse
+    const jsonStart = text.indexOf('{');
+    const jsonEnd = text.lastIndexOf('}') + 1;
+    
+    if (jsonStart < 0 || jsonEnd <= 0) {
+      console.error("Invalid response format, cannot find JSON:", text.substring(0, 200));
+      throw new Error('Invalid response format from Google Sheets');
+    }
+    
+    const jsonString = text.substring(jsonStart, jsonEnd);
+    console.log("JSON data extracted, parsing...");
+    
+    try {
+      const parsedData = JSON.parse(jsonString);
+      console.log("Data parsed successfully");
+      return parsedData;
+    } catch (error) {
+      console.error('Error parsing Google Sheets response:', error);
+      console.error('Problematic JSON string:', jsonString.substring(0, 200) + "...");
+      throw new Error('Failed to parse Google Sheets data');
+    }
   } catch (error) {
-    console.error('Error parsing Google Sheets response:', error);
-    throw new Error('Failed to parse Google Sheets data');
+    console.error("Error in fetchSheetsData:", error);
+    throw error;
   }
 }
 

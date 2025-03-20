@@ -54,13 +54,18 @@ export function useSyncDeliveries() {
         try {
           console.log("Fetching deliveries from Supabase...");
           
+          // Clean up the sheetsUrl to ensure it's valid
+          const cleanedUrl = cleanSheetUrl(sheetsUrl);
+          console.log("Using cleaned sheets URL:", cleanedUrl);
+          
           const response = await supabase.functions.invoke("sync-sheets", {
             body: { 
-              sheetsUrl: sheetsUrl
+              sheetsUrl: cleanedUrl
             }
           });
           
           if (response.error) {
+            console.error("Supabase function error:", response.error);
             throw new Error(response.error.message);
           }
           
@@ -145,6 +150,23 @@ export function useSyncDeliveries() {
     }
   }, [isOnline, toast]);
   
+  // Helper function to clean up Google Sheets URLs
+  const cleanSheetUrl = (url: string): string => {
+    // If it's already just an ID, return it
+    if (/^[a-zA-Z0-9-_]{25,45}$/.test(url)) {
+      return url;
+    }
+    
+    // Extract the spreadsheet ID
+    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) {
+      return `https://docs.google.com/spreadsheets/d/${match[1]}/edit`;
+    }
+    
+    // Return the original if we couldn't clean it
+    return url;
+  };
+  
   // Update delivery status in cache
   const updateLocalDeliveries = useCallback((
     deliveries: Delivery[],
@@ -213,6 +235,9 @@ export function useSyncDeliveries() {
     let failCount = 0;
     const successfulIds: string[] = [];
     
+    // Clean the sheets URL
+    const cleanedUrl = cleanSheetUrl(sheetsUrl);
+    
     // Process each update sequentially to avoid race conditions
     for (const update of offlineChanges) {
       try {
@@ -222,7 +247,7 @@ export function useSyncDeliveries() {
             deliveryId: update.id,
             newStatus: update.status,
             updateType: update.updateType,
-            sheetsUrl: sheetsUrl
+            sheetsUrl: cleanedUrl
           }
         });
         
