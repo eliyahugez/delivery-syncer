@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
@@ -14,19 +13,149 @@ serve(async (req) => {
   }
 
   try {
-    const { sheetsUrl } = await req.json();
+    const { sheetsUrl, action, deliveryId, newStatus, updateType } = await req.json();
 
+    // Create a Supabase client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    
+    // For status update action
+    if (action === "updateStatus") {
+      if (!deliveryId || !newStatus) {
+        return new Response(
+          JSON.stringify({ error: 'Delivery ID and new status are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if we need to batch update for this customer
+      if (updateType === "batch") {
+        console.log(`Batch updating deliveries related to ${deliveryId} to status ${newStatus}`);
+        const { data: delivery } = await supabase
+          .from('deliveries')
+          .select('name')
+          .eq('id', deliveryId)
+          .single();
+          
+        if (!delivery || !delivery.name) {
+          return new Response(
+            JSON.stringify({ error: 'Delivery not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Get all deliveries for this customer
+        const { data: relatedDeliveries } = await supabase
+          .from('deliveries')
+          .select('id, tracking_number')
+          .eq('name', delivery.name);
+          
+        if (!relatedDeliveries || relatedDeliveries.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Related deliveries not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Update all related deliveries
+        const now = new Date().toISOString();
+        const updates = relatedDeliveries.map(rd => ({
+          id: rd.id,
+          status: newStatus,
+          status_date: now
+        }));
+        
+        const { error: updateError } = await supabase
+          .from('deliveries')
+          .upsert(updates);
+          
+        if (updateError) {
+          console.error('Error updating related deliveries:', updateError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to update related deliveries' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Also create history entries for all related deliveries
+        const historyEntries = relatedDeliveries.map(rd => ({
+          delivery_id: rd.id,
+          status: newStatus,
+          timestamp: now,
+          note: `בעדכון קבוצתי`,
+          courier: delivery.name
+        }));
+        
+        const { error: historyError } = await supabase
+          .from('delivery_history')
+          .insert(historyEntries);
+        
+        if (historyError) {
+          console.error('Error creating history entries:', historyError);
+        }
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `Updated ${relatedDeliveries.length} deliveries`,
+            updatedIds: relatedDeliveries.map(d => d.id)
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } else {
+        // Single delivery update
+        console.log(`Updating delivery ${deliveryId} to status ${newStatus}`);
+        
+        const now = new Date().toISOString();
+        const { error: updateError } = await supabase
+          .from('deliveries')
+          .update({ status: newStatus, status_date: now })
+          .eq('id', deliveryId);
+          
+        if (updateError) {
+          console.error('Error updating delivery:', updateError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to update delivery' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const { error: historyError } = await supabase
+          .from('delivery_history')
+          .insert({
+            delivery_id: deliveryId,
+            status: newStatus,
+            timestamp: now
+          });
+        
+        if (historyError) {
+          console.error('Error creating history entry:', historyError);
+        }
+        
+        return new Response(
+          JSON.stringify({ success: true, message: 'Delivery updated' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    
+    // For fetching status options
+    if (action === "getStatusOptions") {
+      const statusOptions = await fetchStatusOptionsFromSheets(sheetsUrl);
+      return new Response(
+        JSON.stringify({ statusOptions }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Default action: Sync all data
     if (!sheetsUrl) {
       return new Response(
         JSON.stringify({ error: 'Google Sheets URL is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Create a Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     // Extract sheets ID from URL
     const spreadsheetId = extractSheetId(sheetsUrl);
@@ -97,6 +226,90 @@ async function fetchSheetsData(spreadsheetId: string): Promise<any> {
   }
 }
 
+// Function to fetch status options from the Google Sheet
+async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
+  try {
+    console.log(`Fetching status options from: ${sheetsUrl}`);
+    const spreadsheetId = extractSheetId(sheetsUrl);
+    if (!spreadsheetId) {
+      throw new Error('Invalid Google Sheets URL');
+    }
+
+    // Fetch the whole sheet data
+    const data = await fetchSheetsData(spreadsheetId);
+    
+    // Look for status column
+    if (!data || !data.table || !data.table.cols || !data.table.rows) {
+      throw new Error('Invalid sheet data structure');
+    }
+
+    // Try to find a status column
+    const statusColumnIndex = data.table.cols.findIndex((col: any) => {
+      const label = (col.label || "").toLowerCase();
+      return label.includes("status") || label.includes("סטטוס") || label.includes("מצב");
+    });
+
+    if (statusColumnIndex === -1) {
+      console.log('Status column not found, returning default options');
+      return [
+        { value: "pending", label: "ממתין" },
+        { value: "in_progress", label: "בדרך" },
+        { value: "delivered", label: "נמסר" },
+        { value: "failed", label: "נכשל" },
+        { value: "returned", label: "הוחזר" }
+      ];
+    }
+
+    // Extract unique status values
+    const uniqueStatuses = new Set();
+    data.table.rows.forEach((row: any) => {
+      if (row.c && row.c[statusColumnIndex] && row.c[statusColumnIndex].v) {
+        uniqueStatuses.add(row.c[statusColumnIndex].v);
+      }
+    });
+
+    // Convert to the expected format
+    const options = Array.from(uniqueStatuses).map((status: any) => {
+      const normalizedStatus = normalizeStatus(status);
+      return { 
+        value: normalizedStatus, 
+        label: getHebrewLabel(normalizedStatus, status)
+      };
+    });
+
+    console.log('Found status options:', options);
+    return options;
+  } catch (error) {
+    console.error('Error fetching status options:', error);
+    // Return default options if there's an error
+    return [
+      { value: "pending", label: "ממתין" },
+      { value: "in_progress", label: "בדרך" },
+      { value: "delivered", label: "נמסר" },
+      { value: "failed", label: "נכשל" },
+      { value: "returned", label: "הוחזר" }
+    ];
+  }
+}
+
+// Helper function to get Hebrew label for status
+function getHebrewLabel(normalizedStatus: string, originalStatus: string): string {
+  // First try to use the original status if it's in Hebrew
+  if (/[\u0590-\u05FF]/.test(originalStatus)) {
+    return originalStatus;
+  }
+
+  // Otherwise, use default Hebrew translations
+  switch (normalizedStatus) {
+    case "pending": return "ממתין";
+    case "in_progress": return "בדרך";
+    case "delivered": return "נמסר";
+    case "failed": return "נכשל";
+    case "returned": return "הוחזר";
+    default: return originalStatus;
+  }
+}
+
 // Function to process Google Sheets data and save to Supabase
 async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> {
   if (!sheetsData || !sheetsData.table || !sheetsData.table.rows || !sheetsData.table.cols) {
@@ -112,7 +325,6 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
 
   const rows = sheetsData.table.rows;
   const deliveries = [];
-  const dbOperations = [];
   
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -159,7 +371,8 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
       name,
       phone,
       address,
-      assigned_to: assignedTo
+      assigned_to: assignedTo,
+      external_id: trackingNumber  // Use tracking number as external_id for easier reference
     };
 
     // Upsert delivery record

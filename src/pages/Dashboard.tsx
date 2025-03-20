@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { useDeliveries } from "@/hooks/useDeliveries";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { CloudSun } from "lucide-react";
+import { CloudSun, RefreshCw } from "lucide-react";
 import DeliveryTable from "@/components/deliveries/DeliveryTable";
 
 const Dashboard = () => {
@@ -17,7 +17,8 @@ const Dashboard = () => {
     fetchDeliveries,
     updateStatus,
     pendingUpdates,
-    syncPendingUpdates
+    syncPendingUpdates,
+    deliveryStatusOptions
   } = useDeliveries();
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -43,8 +44,8 @@ const Dashboard = () => {
     }).format(date);
   };
 
-  const handleUpdateStatus = async (id: string, newStatus: string) => {
-    await updateStatus(id, newStatus);
+  const handleUpdateStatus = async (id: string, newStatus: string, updateType?: string) => {
+    await updateStatus(id, newStatus, updateType);
   };
 
   return (
@@ -78,14 +79,26 @@ const Dashboard = () => {
             )}
           </div>
           
-          <Button
-            className="flex items-center gap-2"
-            onClick={handleSync}
-            disabled={isSyncing || !isOnline}
-          >
-            <CloudSun className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
-            {isSyncing ? "מסנכרן..." : "סנכרן משלוחים"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              className="flex items-center gap-2"
+              onClick={handleSync}
+              disabled={isSyncing || !isOnline}
+            >
+              <CloudSun className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+              {isSyncing ? "מסנכרן..." : "סנכרן משלוחים"}
+            </Button>
+            
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
+              onClick={() => syncPendingUpdates()}
+              disabled={pendingUpdates === 0 || !isOnline}
+            >
+              <RefreshCw className="h-4 w-4" />
+              עדכן סטטוסים
+            </Button>
+          </div>
         </div>
 
         {error && (
@@ -102,6 +115,7 @@ const Dashboard = () => {
           onUpdateStatus={handleUpdateStatus}
           isLoading={isLoading}
           sheetsUrl={user?.sheetsUrl}
+          statusOptions={deliveryStatusOptions}
         />
       </main>
     </div>

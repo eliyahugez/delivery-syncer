@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { Delivery } from "@/types/delivery";
 import { Phone, CalendarClock, MapPin, Package, User, MessageCircle } from "lucide-react";
@@ -13,49 +14,77 @@ import {
 import DeliveryStatusBadge from "./DeliveryStatusBadge";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
 interface DeliveryTableProps {
   deliveries: Delivery[];
-  onUpdateStatus: (id: string, newStatus: string) => Promise<void>;
+  onUpdateStatus: (id: string, newStatus: string, updateType?: string) => Promise<void>;
   isLoading: boolean;
   sheetsUrl?: string;
+  statusOptions?: Array<{ value: string; label: string }>;
 }
 
 const DeliveryTable: React.FC<DeliveryTableProps> = ({
   deliveries,
   onUpdateStatus,
   isLoading,
+  sheetsUrl,
+  statusOptions = [
+    { value: "pending", label: "ממתין" },
+    { value: "in_progress", label: "בדרך" },
+    { value: "delivered", label: "נמסר" },
+    { value: "failed", label: "נכשל" },
+    { value: "returned", label: "הוחזר" },
+  ]
 }) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [localStatusOptions, setLocalStatusOptions] = useState(statusOptions);
+
+  // Fetch status options from Google Sheet when available
+  useEffect(() => {
+    const fetchStatusOptions = async () => {
+      if (!sheetsUrl) return;
+      
+      try {
+        const response = await supabase.functions.invoke('sync-sheets', {
+          body: {
+            action: 'getStatusOptions',
+            sheetsUrl
+          }
+        });
+        
+        if (response.data?.statusOptions && response.data.statusOptions.length > 0) {
+          setLocalStatusOptions(response.data.statusOptions);
+        }
+      } catch (error) {
+        console.error('Error fetching status options:', error);
+      }
+    };
+    
+    fetchStatusOptions();
+  }, [sheetsUrl]);
 
   // Handle status change for a single delivery or a group of deliveries
   const handleStatusChange = async (
     id: string,
     newStatus: string,
-    groupDeliveries?: Delivery[]
+    updateType: string = "single"
   ) => {
-    // If we're updating a group, we'll update all deliveries in the group
-    const deliveriesToUpdate =
-      groupDeliveries || deliveries.filter((d) => d.id === id);
-    const deliveryIds = deliveriesToUpdate.map((d) => d.id);
-
-    // Set all deliveries in the group as updating
-    deliveryIds.forEach((id) => setUpdatingId(id));
+    // Set the delivery as updating
+    setUpdatingId(id);
 
     try {
-      // Update each delivery in the group
-      const updatePromises = deliveryIds.map((id) =>
-        onUpdateStatus(id, newStatus)
-      );
-      await Promise.all(updatePromises);
+      // Update the status using the onUpdateStatus callback
+      await onUpdateStatus(id, newStatus, updateType);
 
       toast({
         title: "סטטוס עודכן",
-        description:
-          deliveryIds.length > 1
-            ? `סטטוס ${deliveryIds.length} משלוחים עודכן בהצלחה`
-            : "סטטוס המשלוח עודכן בהצלחה",
+        description: updateType === "batch" 
+          ? "סטטוס כל המשלוחים של לקוח זה עודכן בהצלחה"
+          : "סטטוס המשלוח עודכן בהצלחה",
       });
     } catch (error) {
       console.error("Error updating status:", error);
@@ -65,7 +94,7 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
         variant: "destructive",
       });
     } finally {
-      // Clear updating state for all deliveries in the group
+      // Clear updating state
       setUpdatingId(null);
     }
   };
@@ -149,25 +178,6 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
     }
   };
 
-  const statusOptions = [
-    { value: "pending", label: "ממתין" },
-    { value: "in_progress", label: "בדרך" },
-    { value: "delivered", label: "נמסר" },
-    { value: "failed", label: "נכשל" },
-    { value: "returned", label: "הוחזר" },
-  ];
-
-  // Group deliveries by customer name
-  const groupedDeliveries = deliveries.reduce((acc, delivery) => {
-    // Use customer name as the grouping key, fallback to 'לא משויך' if name is empty
-    const group = delivery.name ? delivery.name.trim() : "לא משויך";
-    if (!acc[group]) {
-      acc[group] = [];
-    }
-    acc[group].push(delivery);
-    return acc;
-  }, {} as Record<string, Delivery[]>);
-
   if (isLoading) {
     return (
       <div className="glass p-8 rounded-xl flex flex-col items-center justify-center min-h-[300px]">
@@ -185,6 +195,17 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
       </div>
     );
   }
+
+  // Group deliveries by customer name
+  const groupedDeliveries = deliveries.reduce((acc, delivery) => {
+    // Use customer name as the grouping key, fallback to 'לא משויך' if name is empty
+    const group = delivery.name ? delivery.name.trim() : "לא משויך";
+    if (!acc[group]) {
+      acc[group] = [];
+    }
+    acc[group].push(delivery);
+    return acc;
+  }, {} as Record<string, Delivery[]>);
 
   // If we have grouped deliveries, display them in sections
   if (Object.keys(groupedDeliveries).length > 1) {
@@ -264,7 +285,7 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                         handleStatusChange(
                           groupDeliveries[0].id,
                           value,
-                          groupDeliveries
+                          "batch"
                         )
                       }
                       defaultValue={groupDeliveries[0].status}
@@ -276,7 +297,7 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                         <SelectValue placeholder="סטטוס" />
                       </SelectTrigger>
                       <SelectContent>
-                        {statusOptions.map((option) => (
+                        {localStatusOptions.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}
                           </SelectItem>
@@ -369,7 +390,7 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                     <SelectValue placeholder="סטטוס" />
                   </SelectTrigger>
                   <SelectContent>
-                    {statusOptions.map((option) => (
+                    {localStatusOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>

@@ -1,10 +1,6 @@
 
 import { useState, useEffect, useCallback } from "react";
-import { Delivery, COLUMN_SIGNATURES, DELIVERY_STATUS_OPTIONS } from "@/types/delivery";
-import {
-  fetchDeliveriesFromSheets,
-  updateDeliveryStatus,
-} from "@/utils/googleSheets";
+import { Delivery, DELIVERY_STATUS_OPTIONS } from "@/types/delivery";
 import {
   saveToStorage,
   getFromStorage,
@@ -20,6 +16,7 @@ interface PendingUpdate {
   deliveryId: string;
   newStatus: string;
   note?: string;
+  updateType?: string;
 }
 
 export const useDeliveries = () => {
@@ -32,15 +29,16 @@ export const useDeliveries = () => {
   const [detectedColumns, setDetectedColumns] = useState<Record<string, string>>({});
   const [deliveryHistory, setDeliveryHistory] = useState<Record<string, Delivery[]>>({});
   const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([]);
+  const [statusOptions, setStatusOptions] = useState(DELIVERY_STATUS_OPTIONS);
 
   // Check if we're online
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
 
+  // Set up online/offline event listeners
   useEffect(() => {
-    // Set up online/offline event listeners
     const handleOnline = () => {
       setIsOnline(true);
-      // כאשר יש חיבור לאינטרנט, ננסה לסנכרן את העדכונים הממתינים
+      // When back online, try to sync pending updates
       syncPendingUpdates();
     };
     const handleOffline = () => setIsOnline(false);
@@ -54,7 +52,28 @@ export const useDeliveries = () => {
     };
   }, []);
 
-  // סנכרון עדכונים שממתינים
+  // Load status options from Google Sheets
+  const fetchStatusOptionsFromSheets = useCallback(async () => {
+    if (!user?.sheetsUrl || !isOnline) return;
+    
+    try {
+      const response = await supabase.functions.invoke('sync-sheets', {
+        body: {
+          action: 'getStatusOptions',
+          sheetsUrl: user.sheetsUrl
+        }
+      });
+      
+      if (response.data && response.data.statusOptions) {
+        setStatusOptions(response.data.statusOptions);
+        console.log('Loaded status options from sheets:', response.data.statusOptions);
+      }
+    } catch (error) {
+      console.error('Error fetching status options:', error);
+    }
+  }, [user?.sheetsUrl, isOnline]);
+
+  // Sync pending updates
   const syncPendingUpdates = useCallback(async () => {
     const updates = getFromStorage<PendingUpdate[]>(
       storageKeys.OFFLINE_CHANGES, 
@@ -69,12 +88,16 @@ export const useDeliveries = () => {
     for (const update of updates) {
       try {
         if (isOnline) {
-          // Explicitly provide the type for update parameters
-          await updateStatus(
-            update.deliveryId, 
-            update.newStatus,
-            update.note
-          );
+          // Update via the Edge Function
+          await supabase.functions.invoke('sync-sheets', {
+            body: {
+              action: 'updateStatus',
+              deliveryId: update.deliveryId,
+              newStatus: update.newStatus,
+              updateType: update.updateType,
+              sheetsUrl: user?.sheetsUrl
+            }
+          });
         } else {
           failedUpdates.push(update);
         }
@@ -84,7 +107,7 @@ export const useDeliveries = () => {
       }
     }
     
-    // שמור את העדכונים שנכשלו חזרה באחסון
+    // Save the failed updates back to storage
     setPendingUpdates(failedUpdates);
     saveToStorage(storageKeys.OFFLINE_CHANGES, failedUpdates);
     
@@ -102,7 +125,7 @@ export const useDeliveries = () => {
         variant: "destructive",
       });
     }
-  }, [isOnline]);
+  }, [isOnline, user?.sheetsUrl]);
 
   // Load cached deliveries on component mount
   useEffect(() => {
@@ -135,23 +158,33 @@ export const useDeliveries = () => {
     setDetectedColumns(columns);
     
     // Load pending updates
-    const updates = getFromStorage<{deliveryId: string, newStatus: string, note?: string}[]>(
+    const updates = getFromStorage<PendingUpdate[]>(
       storageKeys.OFFLINE_CHANGES,
       []
     );
     setPendingUpdates(updates);
     
+    // Load cached status options
+    const cachedOptions = getFromStorage(
+      storageKeys.STATUS_OPTIONS, 
+      DELIVERY_STATUS_OPTIONS
+    );
+    setStatusOptions(cachedOptions);
+    
     // Load deliveries from Supabase on mount
     fetchDeliveriesFromDB();
+    
+    // Fetch status options from sheets
+    fetchStatusOptionsFromSheets();
   }, []);
 
-  // פונקציה לטעינת משלוחים מסופאבייס
+  // Function to load deliveries from Supabase
   const fetchDeliveriesFromDB = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // טעינת משלוחים מהדאטאבייס
+      // Load deliveries from the database
       const { data: dbDeliveries, error: dbError } = await supabase
         .from('deliveries')
         .select('*')
@@ -160,7 +193,7 @@ export const useDeliveries = () => {
       if (dbError) throw dbError;
       
       if (dbDeliveries && dbDeliveries.length > 0) {
-        // המרת הנתונים לפורמט של Delivery
+        // Convert data to Delivery format
         const formattedDeliveries: Delivery[] = dbDeliveries.map(delivery => ({
           id: delivery.id,
           trackingNumber: delivery.tracking_number,
@@ -171,10 +204,10 @@ export const useDeliveries = () => {
           phone: delivery.phone || "לא זמין",
           address: delivery.address || "כתובת לא זמינה",
           assignedTo: delivery.assigned_to || "לא שויך",
-          history: [] // יטען בנפרד
+          history: [] // Will load separately
         }));
         
-        // טעינת היסטוריית משלוחים
+        // Load delivery history
         for (const delivery of formattedDeliveries) {
           const { data: historyData, error: historyError } = await supabase
             .from('delivery_history')
@@ -199,7 +232,7 @@ export const useDeliveries = () => {
         setLastSyncTime(now);
         saveToStorage(storageKeys.LAST_SYNC, now.toISOString());
       } else if (user?.sheetsUrl) {
-        // אם אין נתונים בדאטאבייס, ננסה לטעון מגוגל שיטס
+        // If no data in the database, try to load from Google Sheets
         await fetchDeliveries();
       }
       
@@ -208,7 +241,7 @@ export const useDeliveries = () => {
       console.error("Error fetching deliveries from DB:", err);
       const errorMessage = err instanceof Error ? err.message : "שגיאה בטעינת משלוחים מהדאטאבייס";
       
-      // אם יש שגיאה בטעינה מהדאטאבייס, ננסה לטעון מגוגל שיטס או להשתמש בנתונים מהאחסון המקומי
+      // If there's an error loading from the database, try to load from Google Sheets
       if (user?.sheetsUrl) {
         try {
           await fetchDeliveries();
@@ -223,117 +256,7 @@ export const useDeliveries = () => {
     }
   }, [user?.sheetsUrl]);
 
-  // שמירת משלוח יחיד בדאטאבייס
-  const saveDeliveryToDB = async (delivery: Delivery) => {
-    if (!isOnline) return false;
-    
-    try {
-      // יצירת UUID מתוך המזהה הקיים או יצירת חדש
-      const dbId = uuidv4();
-      
-      // המרת המשלוח לפורמט הדאטאבייס
-      const deliveryData = {
-        id: dbId,
-        tracking_number: delivery.trackingNumber,
-        scan_date: delivery.scanDate,
-        status_date: delivery.statusDate,
-        status: delivery.status,
-        name: delivery.name,
-        phone: delivery.phone,
-        address: delivery.address,
-        assigned_to: delivery.assignedTo,
-        external_id: delivery.id // שומר את המזהה המקורי כשדה נפרד
-      };
-      
-      // בדיקה אם המשלוח כבר קיים לפי external_id
-      const { data: existingDelivery } = await supabase
-        .from('deliveries')
-        .select('id')
-        .eq('external_id', delivery.id)
-        .maybeSingle();
-        
-      let result;
-      
-      if (existingDelivery) {
-        // עדכון משלוח קיים
-        result = await supabase
-          .from('deliveries')
-          .update(deliveryData)
-          .eq('external_id', delivery.id);
-      } else {
-        // הוספת משלוח חדש
-        result = await supabase
-          .from('deliveries')
-          .insert(deliveryData);
-      }
-      
-      if (result.error) throw result.error;
-      
-      // שמירת ההיסטוריה, אם יש
-      if (delivery.history && delivery.history.length > 0) {
-        // מחיקת היסטוריה קיימת ויצירתה מחדש
-        if (existingDelivery) {
-          await supabase
-            .from('delivery_history')
-            .delete()
-            .eq('delivery_id', existingDelivery.id);
-        }
-          
-        // הוספת ההיסטוריה החדשה
-        const historyData = delivery.history.map(entry => ({
-          id: uuidv4(),
-          delivery_id: existingDelivery?.id || dbId,
-          status: entry.status,
-          timestamp: entry.timestamp,
-          note: entry.note || null,
-          courier: entry.courier || null
-        }));
-        
-        const { error: historyError } = await supabase
-          .from('delivery_history')
-          .insert(historyData);
-          
-        if (historyError) throw historyError;
-      }
-      
-      return true;
-    } catch (error) {
-      console.error("Error saving delivery to DB:", error);
-      return false;
-    }
-  };
-
-  // שמירת כל המשלוחים בדאטאבייס
-  const saveAllDeliveriesToDB = async () => {
-    if (!isOnline || deliveries.length === 0) return false;
-    
-    try {
-      let successCount = 0;
-      
-      for (const delivery of deliveries) {
-        const success = await saveDeliveryToDB(delivery);
-        if (success) successCount++;
-      }
-      
-      toast({
-        title: "סנכרון לדאטאבייס",
-        description: `${successCount} מתוך ${deliveries.length} משלוחים סונכרנו בהצלחה`,
-        variant: successCount === deliveries.length ? "default" : "destructive",
-      });
-      
-      return successCount === deliveries.length;
-    } catch (error) {
-      console.error("Error saving all deliveries to DB:", error);
-      toast({
-        title: "שגיאה בסנכרון",
-        description: "אירעה שגיאה בעת סנכרון הנתונים לדאטאבייס",
-        variant: "destructive",
-      });
-      return false;
-    }
-  };
-
-  // Fetch deliveries from Google Sheets
+  // Fetch deliveries from Google Sheets via Edge Function
   const fetchDeliveries = useCallback(async () => {
     if (!user?.sheetsUrl) {
       setError("לא סופק קישור לגליון Google");
@@ -345,211 +268,171 @@ export const useDeliveries = () => {
     setError(null);
 
     try {
-      console.log("Fetching deliveries from Google Sheets...");
-      const { 
-        deliveries: fetchedDeliveries, 
-        isTestData: usingTestData,
-        detectedColumns: newDetectedColumns 
-      } = await fetchDeliveriesFromSheets(user.sheetsUrl, COLUMN_SIGNATURES);
-
-      console.log(
-        `Fetched ${fetchedDeliveries.length} deliveries:`,
-        fetchedDeliveries
-      );
-      setIsTestData(usingTestData);
-
+      console.log("Fetching deliveries from Edge Function...");
+      
+      const response = await supabase.functions.invoke('sync-sheets', {
+        body: { sheetsUrl: user.sheetsUrl }
+      });
+      
+      if (!response.data) {
+        throw new Error('קבלת תשובה ריקה מהשרת');
+      }
+      
+      const { deliveries: fetchedDeliveries, columnMap: newDetectedColumns } = response.data;
+      
+      console.log(`Fetched ${fetchedDeliveries?.length} deliveries`);
+      
       if (newDetectedColumns) {
-        console.log("Detected columns:", newDetectedColumns);
         setDetectedColumns(newDetectedColumns);
         saveToStorage(storageKeys.DETECTED_COLUMNS, newDetectedColumns);
-        
-        // שמירת התאמות העמודות בדאטאבייס
-        if (isOnline && !usingTestData) {
-          const { error } = await supabase
-            .from('column_mappings')
-            .upsert({
-              id: uuidv4(),
-              sheet_url: user.sheetsUrl,
-              mappings: newDetectedColumns,
-              user_id: user?.id || null
-            });
-            
-          if (error) {
-            console.error("Error saving column mappings to DB:", error);
-          }
-        }
       }
 
-      if (usingTestData) {
-        console.log("Using test data due to CORS issues");
-        toast({
-          title: "שימוש בנתוני דוגמה",
-          description:
-            "לא ניתן להתחבר ישירות לקובץ Google Sheets. ודא שהקובץ משותף לצפייה ציבורית או השתמש בקישור לתצוגה.",
-          variant: "destructive",
-        });
-      }
-
-      if (fetchedDeliveries.length === 0) {
+      if (!fetchedDeliveries || fetchedDeliveries.length === 0) {
         console.warn("No deliveries fetched");
         toast({
           title: "לא נמצאו משלוחים",
-          description:
-            "לא נמצאו משלוחים בגליון. ודא שהגליון מכיל את העמודות הנדרשות.",
+          description: "לא נמצאו משלוחים בגליון. ודא שהגליון מכיל את העמודות הנדרשות.",
           variant: "destructive",
         });
-      }
+      } else {
+        // Ensure all deliveries have required fields (even if empty)
+        const normalizedDeliveries = fetchedDeliveries.map(delivery => ({
+          ...delivery,
+          name: delivery.name || "ללא שם",
+          phone: delivery.phone || "לא זמין",
+          address: delivery.address || "כתובת לא זמינה",
+          assignedTo: delivery.assignedTo || "לא שויך",
+          // Initialize history if not present
+          history: delivery.history || [{
+            timestamp: new Date().toISOString(),
+            status: delivery.status,
+            courier: delivery.assignedTo || user.name
+          }]
+        }));
 
-      // Ensure all deliveries have required fields (even if empty)
-      const normalizedDeliveries = fetchedDeliveries.map(delivery => ({
-        ...delivery,
-        name: delivery.name || "ללא שם",
-        phone: delivery.phone || "לא זמין",
-        address: delivery.address || "כתובת לא זמינה",
-        assignedTo: delivery.assignedTo || "לא שויך",
-        // Initialize history if not present
-        history: delivery.history || [{
-          timestamp: new Date().toISOString(),
-          status: delivery.status,
-          courier: delivery.assignedTo || user.name
-        }]
-      }));
-
-      // Update delivery history - compare with previous deliveries and update history
-      const updatedHistory = { ...deliveryHistory };
-      normalizedDeliveries.forEach(delivery => {
-        if (!updatedHistory[delivery.id]) {
-          updatedHistory[delivery.id] = [delivery];
-        } else {
-          const lastVersion = updatedHistory[delivery.id][updatedHistory[delivery.id].length - 1];
-          if (lastVersion.status !== delivery.status) {
-            updatedHistory[delivery.id].push(delivery);
+        // Update delivery history - compare with previous deliveries and update history
+        const updatedHistory = { ...deliveryHistory };
+        normalizedDeliveries.forEach(delivery => {
+          if (!updatedHistory[delivery.id]) {
+            updatedHistory[delivery.id] = [delivery];
+          } else {
+            const lastVersion = updatedHistory[delivery.id][updatedHistory[delivery.id].length - 1];
+            if (lastVersion.status !== delivery.status) {
+              updatedHistory[delivery.id].push(delivery);
+            }
           }
-        }
-      });
-      setDeliveryHistory(updatedHistory);
-      saveToStorage(storageKeys.DELIVERY_HISTORY, updatedHistory);
+        });
+        
+        setDeliveryHistory(updatedHistory);
+        saveToStorage(storageKeys.DELIVERY_HISTORY, updatedHistory);
 
-      setDeliveries(normalizedDeliveries);
-      saveToStorage(storageKeys.DELIVERIES_CACHE, normalizedDeliveries);
+        setDeliveries(normalizedDeliveries);
+        saveToStorage(storageKeys.DELIVERIES_CACHE, normalizedDeliveries);
 
-      const now = new Date();
-      setLastSyncTime(now);
-      saveToStorage(storageKeys.LAST_SYNC, now.toISOString());
-      
-      // שמירת המשלוחים לדאטאבייס
-      if (isOnline && !usingTestData) {
-        await saveAllDeliveriesToDB();
+        const now = new Date();
+        setLastSyncTime(now);
+        saveToStorage(storageKeys.LAST_SYNC, now.toISOString());
       }
+      
+      // Also fetch status options
+      await fetchStatusOptionsFromSheets();
 
       setIsLoading(false);
     } catch (err) {
       console.error("Error fetching deliveries:", err);
-      const errorMessage = err instanceof Error ? err.message : "שגיאה בטעינת משלוחים מ-Google Sheets";
+      const errorMessage = err instanceof Error ? err.message : "שגיאה בטעינת משלוחים";
       setError(errorMessage);
       setIsLoading(false);
     }
-  }, [user, deliveryHistory, isOnline]);
+  }, [user, deliveryHistory]);
 
-  // Initial fetch
-  useEffect(() => {
-    if (user?.sheetsUrl) {
-      fetchDeliveries();
-    }
-  }, [user?.sheetsUrl, fetchDeliveries]);
-
-  // Set up periodic sync if online
-  useEffect(() => {
-    if (!isOnline || !user?.sheetsUrl) return;
-
-    const syncInterval = setInterval(() => {
-      console.log("Auto-syncing deliveries...");
-      fetchDeliveries();
-    }, 5 * 60 * 1000); // Sync every 5 minutes
-
-    return () => clearInterval(syncInterval);
-  }, [isOnline, user?.sheetsUrl, fetchDeliveries]);
-
-  // Add a new delivery manually (for offline use)
-  const addDelivery = useCallback((newDelivery: Partial<Delivery>) => {
-    const id = `manual-${Date.now()}`;
-    const now = new Date().toISOString();
-    
-    const delivery: Delivery = {
-      id,
-      trackingNumber: newDelivery.trackingNumber || `MAN-${Date.now().toString().slice(-6)}`,
-      scanDate: now,
-      statusDate: now,
-      status: newDelivery.status || 'pending',
-      name: newDelivery.name || 'ללא שם',
-      phone: newDelivery.phone || 'לא זמין',
-      address: newDelivery.address || 'כתובת לא זמינה',
-      assignedTo: newDelivery.assignedTo || user?.name || 'לא שויך',
-      history: [{
-        timestamp: now,
-        status: newDelivery.status || 'pending',
-        note: 'משלוח נוצר ידנית',
-        courier: user?.name || 'לא שויך'
-      }]
-    };
-    
-    setDeliveries(prev => {
-      const updated = [...prev, delivery];
-      saveToStorage(storageKeys.DELIVERIES_CACHE, updated);
-      return updated;
-    });
-    
-    // Update delivery history
-    setDeliveryHistory(prev => {
-      const updated = { ...prev, [id]: [delivery] };
-      saveToStorage(storageKeys.DELIVERY_HISTORY, updated);
-      return updated;
-    });
-    
-    // שמירת המשלוח לדאטאבייס אם יש חיבור לאינטרנט
-    if (isOnline) {
-      saveDeliveryToDB(delivery).then(success => {
-        if (!success) {
-          toast({
-            title: 'שגיאה בשמירה',
-            description: 'המשלוח לא נשמר בדאטאבייס, אך נשמר באופן מקומי',
-            variant: "destructive",
-          });
-        }
-      });
-    }
-    
-    toast({
-      title: 'משלוח חדש',
-      description: `נוסף משלוח חדש: ${delivery.trackingNumber}`,
-    });
-    
-    return delivery;
-  }, [user?.name, isOnline]);
-
-  // Update delivery status - can handle single or multiple deliveries
+  // Update delivery status with option for batch updates
   const updateStatus = useCallback(
-    async (deliveryId: string, newStatus: string, note?: string) => {
+    async (deliveryId: string, newStatus: string, updateType = "single") => {
       if (!user?.sheetsUrl) {
         throw new Error("לא סופק קישור לגליון Google");
       }
 
-      // אם אין חיבור לאינטרנט, שמור את העדכון מקומית ולתור העדכונים העתידיים
+      // If offline, save the update locally and to the pending updates queue
       if (!isOnline) {
-        const updatedPendingUpdates: PendingUpdate[] = [...pendingUpdates, { deliveryId, newStatus, note }];
+        const updatedPendingUpdates: PendingUpdate[] = [
+          ...pendingUpdates, 
+          { deliveryId, newStatus, updateType }
+        ];
+        
         setPendingUpdates(updatedPendingUpdates);
         saveToStorage(storageKeys.OFFLINE_CHANGES, updatedPendingUpdates);
         
-        // עדכון מקומי
+        // Local update
         const now = new Date().toISOString();
         
-        setDeliveries((prevDeliveries) =>
-          prevDeliveries.map((delivery) => {
-            if (delivery.id === deliveryId) {
+        setDeliveries((prevDeliveries) => {
+          // If batch update, find all deliveries with the same name
+          if (updateType === "batch") {
+            const targetDelivery = prevDeliveries.find(d => d.id === deliveryId);
+            if (!targetDelivery) return prevDeliveries;
+            
+            const targetName = targetDelivery.name;
+            
+            return prevDeliveries.map(delivery => {
+              if (delivery.name === targetName) {
+                const historyEntry = {
+                  timestamp: now,
+                  status: newStatus,
+                  note: `סטטוס שונה מ-${delivery.status} ל-${newStatus} (עדכון קבוצתי, מקומי)`,
+                  courier: user.name
+                };
+                
+                const updatedHistory = delivery.history || [];
+                updatedHistory.push(historyEntry);
+                
+                return {
+                  ...delivery,
+                  status: newStatus,
+                  statusDate: now,
+                  history: updatedHistory
+                };
+              }
+              return delivery;
+            });
+          } else {
+            // Single delivery update
+            return prevDeliveries.map((delivery) => {
+              if (delivery.id === deliveryId) {
+                const historyEntry = {
+                  timestamp: now,
+                  status: newStatus,
+                  note: `סטטוס שונה מ-${delivery.status} ל-${newStatus} (מקומי)`,
+                  courier: user.name
+                };
+                
+                const updatedHistory = delivery.history || [];
+                updatedHistory.push(historyEntry);
+                
+                return {
+                  ...delivery,
+                  status: newStatus,
+                  statusDate: now,
+                  history: updatedHistory
+                };
+              }
+              return delivery;
+            });
+          }
+        });
+        
+        // Update local storage
+        const updatedDeliveries = deliveries.map(delivery => {
+          // For batch updates
+          if (updateType === "batch") {
+            const targetDelivery = deliveries.find(d => d.id === deliveryId);
+            if (!targetDelivery) return delivery;
+            
+            if (delivery.name === targetDelivery.name) {
               const historyEntry = {
                 timestamp: now,
                 status: newStatus,
-                note: note || `סטטוס שונה מ-${delivery.status} ל-${newStatus} (מקומי, ממתין לסנכרון)`,
+                note: `סטטוס שונה מ-${delivery.status} ל-${newStatus} (עדכון קבוצתי, מקומי)`,
                 courier: user.name
               };
               
@@ -563,17 +446,12 @@ export const useDeliveries = () => {
                 history: updatedHistory
               };
             }
-            return delivery;
-          })
-        );
-        
-        // עדכון האחסון המקומי
-        const updatedDeliveries = deliveries.map((delivery) => {
-          if (delivery.id === deliveryId) {
+          } else if (delivery.id === deliveryId) {
+            // Single delivery update
             const historyEntry = {
               timestamp: now,
               status: newStatus,
-              note: note || `סטטוס שונה מ-${delivery.status} ל-${newStatus} (מקומי, ממתין לסנכרון)`,
+              note: `סטטוס שונה מ-${delivery.status} ל-${newStatus} (מקומי)`,
               courier: user.name
             };
             
@@ -602,107 +480,193 @@ export const useDeliveries = () => {
       }
 
       try {
-        if (isOnline && !isTestData) {
-          // Update in Google Sheets
-          await updateDeliveryStatus(user.sheetsUrl, deliveryId, newStatus);
+        // Online update - send to Edge Function
+        const response = await supabase.functions.invoke('sync-sheets', {
+          body: {
+            action: 'updateStatus',
+            deliveryId,
+            newStatus,
+            updateType,
+            sheetsUrl: user.sheetsUrl
+          }
+        });
+        
+        if (response.error) {
+          throw new Error(response.error.message || 'Failed to update status');
         }
-
+        
         const now = new Date().toISOString();
         
         // Update locally
-        setDeliveries((prevDeliveries) =>
-          prevDeliveries.map((delivery) => {
-            if (delivery.id === deliveryId) {
-              // Create history entry
-              const historyEntry = {
-                timestamp: now,
-                status: newStatus,
-                note: note || `סטטוס שונה מ-${delivery.status} ל-${newStatus}`,
-                courier: user.name
-              };
-              
-              // Add history entry to delivery
-              const updatedHistory = delivery.history || [];
-              updatedHistory.push(historyEntry);
-              
-              return {
-                ...delivery,
-                status: newStatus,
-                statusDate: now,
-                history: updatedHistory
-              };
-            }
-            return delivery;
-          })
-        );
+        setDeliveries((prevDeliveries) => {
+          // For batch updates
+          if (updateType === "batch") {
+            const targetDelivery = prevDeliveries.find(d => d.id === deliveryId);
+            if (!targetDelivery) return prevDeliveries;
+            
+            const targetName = targetDelivery.name;
+            
+            return prevDeliveries.map(delivery => {
+              if (delivery.name === targetName) {
+                const historyEntry = {
+                  timestamp: now,
+                  status: newStatus,
+                  note: `סטטוס שונה מ-${delivery.status} ל-${newStatus} (עדכון קבוצתי)`,
+                  courier: user.name
+                };
+                
+                const updatedHistory = delivery.history || [];
+                updatedHistory.push(historyEntry);
+                
+                return {
+                  ...delivery,
+                  status: newStatus,
+                  statusDate: now,
+                  history: updatedHistory
+                };
+              }
+              return delivery;
+            });
+          } else {
+            // Single delivery update
+            return prevDeliveries.map((delivery) => {
+              if (delivery.id === deliveryId) {
+                const historyEntry = {
+                  timestamp: now,
+                  status: newStatus,
+                  note: `סטטוס שונה מ-${delivery.status} ל-${newStatus}`,
+                  courier: user.name
+                };
+                
+                const updatedHistory = delivery.history || [];
+                updatedHistory.push(historyEntry);
+                
+                return {
+                  ...delivery,
+                  status: newStatus,
+                  statusDate: now,
+                  history: updatedHistory
+                };
+              }
+              return delivery;
+            });
+          }
+        });
 
         // Update cache
-        const updatedDeliveries = deliveries.map((delivery) => {
-          if (delivery.id === deliveryId) {
-            // Create history entry
+        const updatedDeliveries = [...deliveries];
+        
+        // For batch updates
+        if (updateType === "batch") {
+          const targetDelivery = updatedDeliveries.find(d => d.id === deliveryId);
+          if (targetDelivery) {
+            const targetName = targetDelivery.name;
+            
+            for (let i = 0; i < updatedDeliveries.length; i++) {
+              if (updatedDeliveries[i].name === targetName) {
+                const historyEntry = {
+                  timestamp: now,
+                  status: newStatus,
+                  note: `סטטוס שונה מ-${updatedDeliveries[i].status} ל-${newStatus} (עדכון קבוצתי)`,
+                  courier: user.name
+                };
+                
+                const updatedHistory = updatedDeliveries[i].history || [];
+                updatedHistory.push(historyEntry);
+                
+                updatedDeliveries[i] = {
+                  ...updatedDeliveries[i],
+                  status: newStatus,
+                  statusDate: now,
+                  history: updatedHistory
+                };
+              }
+            }
+          }
+        } else {
+          // Single delivery update
+          const index = updatedDeliveries.findIndex(d => d.id === deliveryId);
+          if (index !== -1) {
             const historyEntry = {
               timestamp: now,
               status: newStatus,
-              note: note || `סטטוס שונה מ-${delivery.status} ל-${newStatus}`,
+              note: `סטטוס שונה מ-${updatedDeliveries[index].status} ל-${newStatus}`,
               courier: user.name
             };
             
-            // Add history entry to delivery
-            const updatedHistory = delivery.history || [];
+            const updatedHistory = updatedDeliveries[index].history || [];
             updatedHistory.push(historyEntry);
             
-            return {
-              ...delivery,
+            updatedDeliveries[index] = {
+              ...updatedDeliveries[index],
               status: newStatus,
               statusDate: now,
               history: updatedHistory
             };
           }
-          return delivery;
-        });
+        }
         
         saveToStorage(storageKeys.DELIVERIES_CACHE, updatedDeliveries);
 
         // Update delivery history
         const targetDelivery = deliveries.find(d => d.id === deliveryId);
         if (targetDelivery) {
-          const updatedDelivery = {
-            ...targetDelivery,
-            status: newStatus,
-            statusDate: now,
-            history: [
-              ...(targetDelivery.history || []),
-              {
-                timestamp: now,
+          // For batch updates, update all related deliveries
+          if (updateType === "batch") {
+            const relatedDeliveries = deliveries.filter(d => d.name === targetDelivery.name);
+            
+            for (const delivery of relatedDeliveries) {
+              setDeliveryHistory(prev => {
+                const deliveryHistoryArray = prev[delivery.id] || [];
+                const updatedDelivery = {
+                  ...delivery,
+                  status: newStatus,
+                  statusDate: now,
+                  history: [
+                    ...(delivery.history || []),
+                    {
+                      timestamp: now,
+                      status: newStatus,
+                      note: `סטטוס שונה מ-${delivery.status} ל-${newStatus} (עדכון קבוצתי)`,
+                      courier: user.name
+                    }
+                  ]
+                };
+                
+                const updated = {
+                  ...prev,
+                  [delivery.id]: [...deliveryHistoryArray, updatedDelivery]
+                };
+                return updated;
+              });
+            }
+          } else {
+            // Single delivery update
+            setDeliveryHistory(prev => {
+              const deliveryHistoryArray = prev[deliveryId] || [];
+              const updatedDelivery = {
+                ...targetDelivery,
                 status: newStatus,
-                note: note || `סטטוס שונה מ-${targetDelivery.status} ל-${newStatus}`,
-                courier: user.name
-              }
-            ]
-          };
-          
-          setDeliveryHistory(prev => {
-            const deliveryHistoryArray = prev[deliveryId] || [];
-            const updated = {
-              ...prev,
-              [deliveryId]: [...deliveryHistoryArray, updatedDelivery]
-            };
-            saveToStorage(storageKeys.DELIVERY_HISTORY, updated);
-            return updated;
-          });
-          
-          // עדכון בדאטאבייס
-          if (isOnline) {
-            await saveDeliveryToDB(updatedDelivery);
+                statusDate: now,
+                history: [
+                  ...(targetDelivery.history || []),
+                  {
+                    timestamp: now,
+                    status: newStatus,
+                    note: `סטטוס שונה מ-${targetDelivery.status} ל-${newStatus}`,
+                    courier: user.name
+                  }
+                ]
+              };
+              
+              const updated = {
+                ...prev,
+                [deliveryId]: [...deliveryHistoryArray, updatedDelivery]
+              };
+              saveToStorage(storageKeys.DELIVERY_HISTORY, updated);
+              return updated;
+            });
           }
-        }
-
-        if (isTestData) {
-          toast({
-            title: "מצב דוגמה",
-            description: "הסטטוס עודכן מקומית בלבד ולא בגליון Google",
-            variant: "default",
-          });
         }
 
         return true;
@@ -716,7 +680,7 @@ export const useDeliveries = () => {
         throw err;
       }
     },
-    [deliveries, isOnline, isTestData, user, pendingUpdates]
+    [deliveries, isOnline, user, pendingUpdates]
   );
 
   // Get delivery history for a specific delivery
@@ -734,11 +698,9 @@ export const useDeliveries = () => {
     detectedColumns,
     fetchDeliveries,
     updateStatus,
-    addDelivery,
     getDeliveryHistory,
-    deliveryStatusOptions: DELIVERY_STATUS_OPTIONS,
+    deliveryStatusOptions: statusOptions,
     pendingUpdates: pendingUpdates.length,
-    syncDatabase: saveAllDeliveriesToDB,
     syncPendingUpdates
   };
 };
