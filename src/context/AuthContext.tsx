@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { saveToStorage, getFromStorage, removeFromStorage, storageKeys } from '@/utils/localStorage';
 
@@ -8,11 +9,18 @@ interface User {
   id?: string;  // Adding optional id property to the User interface
 }
 
+// Define what user properties can be updated
+interface UserProfileUpdate {
+  name?: string;
+  sheetsUrl?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   login: (userData: User) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
+  updateUserProfile: (updates: UserProfileUpdate) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,6 +49,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     removeFromStorage(storageKeys.AUTH_USER);
   };
 
+  const updateUserProfile = async (updates: UserProfileUpdate): Promise<void> => {
+    if (!user) {
+      throw new Error('No user logged in');
+    }
+
+    // Update the user object with the new values
+    const updatedUser = {
+      ...user,
+      ...updates
+    };
+
+    // Update state and storage
+    setUser(updatedUser);
+    saveToStorage(storageKeys.AUTH_USER, updatedUser);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -48,6 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         isAuthenticated: !!user,
+        updateUserProfile,
       }}
     >
       {isInitialized ? children : <div>Loading...</div>}
