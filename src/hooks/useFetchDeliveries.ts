@@ -62,7 +62,7 @@ export function useFetchDeliveries(isOnline: boolean) {
           
           if (optionsResponse.error) {
             console.error("Error fetching status options:", optionsResponse.error);
-            throw new Error(`Error accessing Google Sheet: ${optionsResponse.error.message}`);
+            throw new Error(`Error accessing Google Sheet: ${optionsResponse.error.message || 'Unknown error'}`);
           }
           
           // Now fetch the full data
@@ -71,6 +71,8 @@ export function useFetchDeliveries(isOnline: boolean) {
               sheetsUrl: cleanedUrl
             }
           });
+          
+          console.log("Sync-sheets response:", response);
           
           if (response.error) {
             console.error("Supabase function error:", response.error);

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { Delivery } from "@/types/delivery";
 import { useAuth } from "@/context/AuthContext";
@@ -50,9 +49,14 @@ export function useDeliveryData() {
 
   // Load deliveries
   const loadDeliveries = async () => {
-    if (!user?.sheetsUrl) return;
+    if (!user?.sheetsUrl) {
+      setIsLoading(false);
+      setError("לא הוגדר קישור לטבלה. אנא הגדר קישור בהגדרות המשתמש.");
+      return;
+    }
     
     setIsLoading(true);
+    setError(null);
     
     try {
       console.log("Fetching deliveries...");
@@ -66,7 +70,7 @@ export function useDeliveryData() {
             // Show toast for connection issues
             toast({
               title: "שגיאת התחברות",
-              description: "לא ניתן להתחבר לשרת. משתמש במידע מקומי.",
+              description: err.message || "לא ניתן להתחבר לשרת. משתמש במידע מקומי.",
               variant: "destructive",
             });
             
@@ -109,24 +113,7 @@ export function useDeliveryData() {
       // For better DX, show debug info in console
       if (err instanceof Error) {
         console.debug("Error details:", err.message, err.stack);
-        
-        // Check if we have any cached deliveries we can use
-        const cachedDeliveriesStr = localStorage.getItem('cached_deliveries');
-        if (cachedDeliveriesStr) {
-          try {
-            const cachedDeliveries = JSON.parse(cachedDeliveriesStr);
-            console.log("Loaded cached deliveries:", cachedDeliveries.length);
-            setDeliveries(cachedDeliveries);
-            
-            // Set a different error message to indicate we're using cached data
-            setError("משתמש בנתונים מהמטמון. לא ניתן להתחבר לשרת.");
-          } catch (cacheErr) {
-            console.error("Error parsing cached deliveries:", cacheErr);
-            setError("שגיאה בטעינת נתונים. בדוק את החיבור לאינטרנט.");
-          }
-        } else {
-          setError("לא ניתן לטעון נתונים ואין נתונים מקומיים. בדוק את החיבור לאינטרנט.");
-        }
+        setError(err.message || "שגיאה בטעינת נתונים. בדוק את החיבור לאינטרנט.");
       } else {
         setError("שגיאה לא ידועה בטעינת נתונים.");
       }
@@ -144,17 +131,20 @@ export function useDeliveryData() {
   useEffect(() => {
     if (user?.sheetsUrl) {
       loadDeliveries();
+    } else {
+      setIsLoading(false);
+      setError("לא הוגדר קישור לטבלה. אנא הגדר קישור בהגדרות המשתמש.");
     }
     
     // Set up interval for periodic refetching when online
     const intervalId = setInterval(() => {
-      if (user?.sheetsUrl) {
+      if (user?.sheetsUrl && isOnline) {
         loadDeliveries();
       }
     }, 5 * 60 * 1000); // Refresh every 5 minutes
     
     return () => clearInterval(intervalId);
-  }, [user]);
+  }, [user, isOnline]);
 
   return {
     deliveries,

@@ -51,6 +51,7 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
       status: 500,
       body: { 
         error: error.message || 'Error processing Google Sheets data',
+        details: error.details || null,
         spreadsheetId 
       }
     };
