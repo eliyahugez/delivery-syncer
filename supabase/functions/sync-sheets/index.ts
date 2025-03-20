@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { v4 as uuidv4 } from "https://esm.sh/uuid@9.0.0";
@@ -222,6 +223,12 @@ serve(async (req) => {
       
       console.log("Successfully received response from Google Sheets API");
       
+      // Log first row of data for debugging
+      if (response.table && response.table.rows && response.table.rows.length > 0) {
+        const firstRow = response.table.rows[0];
+        console.log("First row of data:", JSON.stringify(firstRow, null, 2));
+      }
+      
       // Process the data and save to Supabase
       const result = await processAndSaveData(response, supabase);
   
@@ -281,17 +288,12 @@ function extractSheetId(url) {
       return match3[1];
     }
     
-    // Format: gid={number} (this needs the spreadsheetId as well which should be extracted before)
-    const regex4 = /#gid=(\d+)/;
+    // Format with gid parameter
+    const regex4 = /\/d\/([a-zA-Z0-9-_]+).*#gid=\d+/;
     const match4 = url.match(regex4);
-    if (match4) {
-      console.log("Found gid parameter:", match4[1]);
-      // Now look for the spreadsheet ID before the gid
-      const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-      if (idMatch && idMatch[1]) {
-        console.log("Extracted spreadsheet ID with gid:", idMatch[1]);
-        return idMatch[1];
-      }
+    if (match4 && match4[1]) {
+      console.log("Extracted spreadsheet ID with gid:", match4[1]);
+      return match4[1];
     }
     
     // Direct ID (if the user just provided the ID)
@@ -302,10 +304,10 @@ function extractSheetId(url) {
     }
     
     console.log("No valid sheet ID pattern found in URL");
-    return null;
+    return url; // As a fallback, return the entire URL and let the Google API handle it
   } catch (error) {
     console.error("Error extracting sheet ID:", error);
-    return null;
+    return url; // Return the complete URL as a last resort
   }
 }
 
@@ -326,6 +328,9 @@ async function fetchSheetsData(spreadsheetId) {
     
     const text = await response.text();
     console.log("Response received, length:", text.length);
+    
+    // Log the first 500 characters of the response for debugging
+    console.log("Response preview:", text.substring(0, 500));
     
     // Check if we got an HTML error page instead of JSON
     if (text.includes("<!DOCTYPE html>") || text.includes("<html>")) {
@@ -616,6 +621,9 @@ async function processAndSaveData(sheetsData, supabase) {
   // Track failed rows for debugging
   const failedRows = [];
   
+  // Track seen tracking numbers to avoid duplicates
+  const seenTrackingNumbers = new Set();
+  
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     
@@ -640,6 +648,17 @@ async function processAndSaveData(sheetsData, supabase) {
       // Extract delivery data using column mapping
       const trackingNumber = getValueByField(values, 'trackingNumber', columnMap);
       
+      // Skip duplicate tracking numbers
+      if (trackingNumber && seenTrackingNumbers.has(trackingNumber)) {
+        console.log(`Skipping duplicate tracking number: ${trackingNumber}`);
+        continue;
+      }
+      
+      // If we have a tracking number, add it to our set
+      if (trackingNumber) {
+        seenTrackingNumbers.add(trackingNumber);
+      }
+      
       // If we don't have a tracking number, generate a unique one using an incrementing counter
       const finalTrackingNumber = trackingNumber || `AUTO-${i}`;
       
@@ -648,11 +667,15 @@ async function processAndSaveData(sheetsData, supabase) {
       const statusDate = getValueByField(values, 'statusDate', columnMap) || new Date().toISOString(); 
       const status = normalizeStatus(getValueByField(values, 'status', columnMap) || 'pending');
       const name = getValueByField(values, 'name', columnMap) || 'ללא שם';
-      const phone = getValueByField(values, 'phone', columnMap) || '';
+      const phone = formatPhoneNumber(getValueByField(values, 'phone', columnMap) || '');
       const address = getValueByField(values, 'address', columnMap) || 'כתובת לא זמינה';
+      const city = getValueByField(values, 'city', columnMap) || '';
       const assignedTo = getValueByField(values, 'assignedTo', columnMap) || 'לא שויך';
 
-      // Generate a UUID for the delivery ID (instead of using string IDs which can cause DB errors)
+      // Combine address and city if both exist
+      const fullAddress = city && address ? `${address}, ${city}` : address;
+
+      // Generate a UUID for the delivery ID
       const id = uuidv4();
 
       // Create the delivery object for the response
@@ -664,7 +687,7 @@ async function processAndSaveData(sheetsData, supabase) {
         status,
         name,
         phone,
-        address,
+        address: fullAddress,
         assignedTo
       };
 
@@ -685,38 +708,72 @@ async function processAndSaveData(sheetsData, supabase) {
         status,
         name,
         phone,
-        address,
+        address: fullAddress,
         assigned_to: assignedTo,
         external_id: finalTrackingNumber  // Use tracking number as external_id for easier reference
       };
 
-      // Upsert delivery record
+      // Check if this tracking number already exists in the database
       try {
-        const { error } = await supabase
+        const { data: existingDelivery, error: lookupError } = await supabase
           .from('deliveries')
-          .insert(dbRecord)
-          .select();
-  
-        if (error) {
-          console.error(`Error inserting delivery ${id}:`, error);
-          failedRows.push({ index: i, reason: `DB error: ${error.message}`, data: dbRecord });
-        } else {
-          console.log(`Successfully inserted delivery ${id} with tracking ${finalTrackingNumber}`);
+          .select('id')
+          .eq('tracking_number', finalTrackingNumber)
+          .maybeSingle();
           
-          // Create a history entry for new deliveries
-          const { error: historyError } = await supabase
-            .from('delivery_history')
-            .insert({
-              delivery_id: id,
+        if (lookupError) {
+          console.error(`Error checking for existing delivery with tracking number ${finalTrackingNumber}:`, lookupError);
+        }
+        
+        if (existingDelivery) {
+          console.log(`Delivery with tracking number ${finalTrackingNumber} already exists, updating it`);
+          
+          // Update the existing delivery
+          const { error: updateError } = await supabase
+            .from('deliveries')
+            .update({
               status,
-              timestamp: new Date().toISOString(),
-              courier: assignedTo
-            });
+              status_date: new Date(statusDate).toISOString(),
+              name,
+              phone,
+              address: fullAddress,
+              assigned_to: assignedTo
+            })
+            .eq('id', existingDelivery.id);
             
-          if (historyError) {
-            console.error(`Error creating history for ${id}:`, historyError);
+          if (updateError) {
+            console.error(`Error updating delivery ${existingDelivery.id}:`, updateError);
+            failedRows.push({ index: i, reason: `DB update error: ${updateError.message}`, data: dbRecord });
           } else {
-            console.log(`Created history entry for ${id}`);
+            console.log(`Successfully updated delivery ${existingDelivery.id}`);
+          }
+        } else {
+          // Insert new delivery
+          const { error: insertError } = await supabase
+            .from('deliveries')
+            .insert(dbRecord);
+            
+          if (insertError) {
+            console.error(`Error inserting delivery ${id}:`, insertError);
+            failedRows.push({ index: i, reason: `DB error: ${insertError.message}`, data: dbRecord });
+          } else {
+            console.log(`Successfully inserted delivery ${id} with tracking ${finalTrackingNumber}`);
+            
+            // Create a history entry for new deliveries
+            const { error: historyError } = await supabase
+              .from('delivery_history')
+              .insert({
+                delivery_id: id,
+                status,
+                timestamp: new Date().toISOString(),
+                courier: assignedTo
+              });
+              
+            if (historyError) {
+              console.error(`Error creating history for ${id}:`, historyError);
+            } else {
+              console.log(`Created history entry for ${id}`);
+            }
           }
         }
       } catch (error) {
@@ -769,6 +826,24 @@ async function processAndSaveData(sheetsData, supabase) {
   };
 }
 
+// Format phone number to international format
+function formatPhoneNumber(phone) {
+  if (!phone) return "";
+  
+  // Remove non-digit characters
+  let digits = phone.replace(/\D/g, "");
+  
+  // Format to international format (+972)
+  if (digits.startsWith("972")) {
+    return `+${digits}`;
+  } else if (digits.startsWith("0")) {
+    return `+972${digits.substring(1)}`;
+  }
+  
+  // If it's not starting with 0 or 972, assume it's a local number
+  return `+972${digits}`;
+}
+
 // Helper function to get a value using the column mapping
 function getValueByField(values, field, columnMap) {
   const index = columnMap[field];
@@ -785,6 +860,7 @@ function analyzeColumns(columns) {
     name: -1,
     phone: -1,
     address: -1,
+    city: -1,
     status: -1,
     statusDate: -1,
     scanDate: -1,
@@ -828,7 +904,8 @@ function analyzeColumns(columns) {
       lowerCol.includes("phone") ||
       lowerCol.includes("mobile") ||
       lowerCol.includes("מס' טלפון") ||
-      lowerCol.includes("phone number")
+      lowerCol.includes("phone number") ||
+      lowerCol.includes("cell")
     ) {
       columnMap.phone = index;
     } 
@@ -837,10 +914,20 @@ function analyzeColumns(columns) {
       lowerCol.includes("כתובת") ||
       lowerCol.includes("address") ||
       lowerCol.includes("location") ||
-      lowerCol.includes("delivery address")
+      lowerCol.includes("delivery address") ||
+      lowerCol.includes("street")
     ) {
       columnMap.address = index;
-    } 
+    }
+    // City
+    else if (
+      lowerCol.includes("עיר") ||
+      lowerCol.includes("city") ||
+      lowerCol.includes("town") ||
+      lowerCol === "city"
+    ) {
+      columnMap.city = index;
+    }
     // Status
     else if (
       lowerCol.includes("סטטוס") ||
@@ -885,6 +972,9 @@ function analyzeColumns(columns) {
     }
   });
 
+  // Log all available columns for debugging
+  console.log("All columns in sheet:", columns);
+
   // If we couldn't find status date, use scan date as a fallback
   if (columnMap.statusDate === -1 && columnMap.scanDate !== -1) {
     columnMap.statusDate = columnMap.scanDate;
@@ -912,6 +1002,29 @@ function analyzeColumns(columns) {
       if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
       columnMap.name = i;
       break;
+    }
+  }
+
+  // If we couldn't find phone and there's an unmapped numeric column, use it for phone
+  if (columnMap.phone === -1) {
+    for (let i = 0; i < columns.length; i++) {
+      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
+      // Look for numeric patterns typical of phone numbers
+      if (/phone|mobile|טלפון|נייד|מספר/i.test(columns[i])) {
+        columnMap.phone = i;
+        break;
+      }
+    }
+  }
+
+  // If we still couldn't find address, try to identify by column name patterns
+  if (columnMap.address === -1) {
+    for (let i = 0; i < columns.length; i++) {
+      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
+      if (/address|location|כתובת|מיקום|רחוב/i.test(columns[i])) {
+        columnMap.address = i;
+        break;
+      }
     }
   }
 

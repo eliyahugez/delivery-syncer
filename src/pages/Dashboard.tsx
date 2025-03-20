@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useDeliveries } from "@/hooks/useDeliveries";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import {
   Grid, 
   List, 
   Upload,
-  Users
+  Users,
+  MapPin
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DeliveryTable from "@/components/deliveries/DeliveryTable";
@@ -34,8 +35,28 @@ const Dashboard = () => {
   } = useDeliveries();
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [viewMode, setViewMode] = useState<"table" | "groups">("groups");
+  const [viewMode, setViewMode] = useState<"table" | "groups">("table"); // Changed default to table
   const [showImportModal, setShowImportModal] = useState(false);
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [nearbyDeliveriesEnabled, setNearbyDeliveriesEnabled] = useState(false);
+
+  // Get user's location if they allow it
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+          console.log("Got user location:", position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+        }
+      );
+    }
+  }, []);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -69,6 +90,28 @@ const Dashboard = () => {
     // Refresh data after import
     fetchDeliveries();
     setShowImportModal(false);
+  };
+
+  // Toggle nearby deliveries mode
+  const toggleNearbyDeliveries = () => {
+    if (!userLocation) {
+      // Ask for location permission if we don't have it
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+          setNearbyDeliveriesEnabled(true);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          alert("לא ניתן לקבל את המיקום שלך. בדוק את הרשאות המיקום בדפדפן.");
+        }
+      );
+    } else {
+      setNearbyDeliveriesEnabled(!nearbyDeliveriesEnabled);
+    }
   };
 
   return (
@@ -160,7 +203,16 @@ const Dashboard = () => {
             </Button>
           </div>
           
-          <div>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant={nearbyDeliveriesEnabled ? "default" : "outline"}
+              size="sm"
+              onClick={toggleNearbyDeliveries}
+              className={nearbyDeliveriesEnabled ? "bg-blue-500 hover:bg-blue-600" : ""}
+            >
+              <MapPin className="h-4 w-4 mr-2" />
+              משלוחים קרובים אליי
+            </Button>
             <Button variant="ghost" size="sm">
               <Filter className="h-4 w-4 mr-2" />
               סינון

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { Delivery } from "@/types/delivery";
-import { Phone, CalendarClock, MapPin, Package, User, MessageCircle } from "lucide-react";
+import { Phone, CalendarClock, MapPin, Package, User, MessageCircle, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -109,23 +109,27 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
       return;
     }
 
-    // Format phone number
-    let formattedPhone = phone.replace(/\D/g, "");
-    if (!formattedPhone.startsWith("+")) {
-      // If the number starts with 972, assume it's already in international format
-      if (formattedPhone.startsWith("972")) {
-        formattedPhone = `+${formattedPhone}`;
-      } else {
-        // Otherwise assume it's Israeli and convert to international format
-        formattedPhone = `+972${
-          formattedPhone.startsWith("0")
-            ? formattedPhone.substring(1)
-            : formattedPhone
-        }`;
-      }
-    }
-
+    // Format phone number to international format
+    const formattedPhone = formatPhoneNumberForCall(phone);
     window.open(`tel:${formattedPhone}`);
+  };
+
+  // Format phone number to international format
+  const formatPhoneNumberForCall = (phone: string): string => {
+    if (!phone) return "";
+    
+    // Remove non-digit characters
+    let formattedPhone = phone.replace(/\D/g, "");
+    
+    // Format to international format (+972)
+    if (formattedPhone.startsWith("972")) {
+      return `+${formattedPhone}`;
+    } else if (formattedPhone.startsWith("0")) {
+      return `+972${formattedPhone.substring(1)}`;
+    }
+    
+    // If it doesn't start with 0 or 972, assume it's a local number and add the country code
+    return `+972${formattedPhone}`;
   };
 
   // Add WhatsApp message handler
@@ -139,26 +143,47 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
       return;
     }
 
-    // Format phone number
-    let formattedPhone = phone.replace(/\D/g, "");
-    if (!formattedPhone.startsWith("+")) {
-      // If the number starts with 972, assume it's already in international format
-      if (formattedPhone.startsWith("972")) {
-        formattedPhone = formattedPhone;
-      } else {
-        // Otherwise assume it's Israeli and convert to international format
-        formattedPhone = `972${
-          formattedPhone.startsWith("0")
-            ? formattedPhone.substring(1)
-            : formattedPhone
-        }`;
-      }
-    }
-
+    // Format phone number for WhatsApp
+    const formattedPhone = formatPhoneNumberForWhatsApp(phone);
+    
     // Create WhatsApp link with predefined message
     const message = "היי זה שליח";
     const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
+  };
+
+  // Format phone number for WhatsApp (no plus sign)
+  const formatPhoneNumberForWhatsApp = (phone: string): string => {
+    if (!phone) return "";
+    
+    // Remove non-digit characters and the plus sign if present
+    let formattedPhone = phone.replace(/\D/g, "");
+    
+    // Format for WhatsApp (no plus sign)
+    if (formattedPhone.startsWith("972")) {
+      return formattedPhone;
+    } else if (formattedPhone.startsWith("0")) {
+      return `972${formattedPhone.substring(1)}`;
+    }
+    
+    // If it doesn't start with 0 or 972, assume it's a local number and add the country code
+    return `972${formattedPhone}`;
+  };
+
+  // Handle navigation to the address
+  const handleNavigate = (address: string) => {
+    if (!address) {
+      toast({
+        title: "כתובת חסרה",
+        description: "לא נמצאה כתובת למשלוח זה",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Open Google Maps with the address
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    window.open(mapsUrl, '_blank');
   };
 
   const formatDate = (dateString: string) => {
@@ -216,7 +241,10 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
             <div className="flex items-center gap-2">
               <User size={16} />
               <h3 className="text-lg font-medium">{group}</h3>
-              <Badge variant="outline" className="ml-2">
+              <Badge 
+                variant={groupDeliveries.length > 1 ? "default" : "outline"} 
+                className={`ml-2 ${groupDeliveries.length > 1 ? "bg-amber-500" : ""}`}
+              >
                 {groupDeliveries.length} משלוחים
               </Badge>
             </div>
@@ -235,20 +263,30 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                     <div className="flex items-center gap-2 mb-2">
                       {/* Use the status of the first delivery in the group */}
                       <DeliveryStatusBadge status={groupDeliveries[0].status} />
-                      <div className="flex items-center text-xs text-muted-foreground">
-                        <Package size={12} className="mr-1" />
-                        <span className="font-medium">
-                          {groupDeliveries.length} משלוחים
+                      
+                      {/* Phone number displayed prominently */}
+                      <div className="flex items-center text-sm font-medium">
+                        <Phone size={14} className="mr-1" />
+                        <span>
+                          {formatPhoneNumberForCall(groupDeliveries[0].phone) || "אין מספר טלפון"}
                         </span>
                       </div>
                     </div>
 
-                    <h3 className="font-medium truncate">
+                    <h3 className="font-medium text-lg">
                       {group || "לקוח ללא שם"}
                     </h3>
 
+                    {/* Display address prominently */}
+                    <div className="flex items-center gap-1 my-2 text-sm">
+                      <MapPin size={14} />
+                      <span className="truncate">
+                        {groupDeliveries[0].address || "כתובת לא זמינה"}
+                      </span>
+                    </div>
+
                     {/* Display all tracking numbers */}
-                    <div className="flex flex-wrap gap-1 mt-1 mb-2">
+                    <div className="flex flex-wrap gap-1 my-2">
                       {groupDeliveries.map((delivery, idx) => (
                         <Badge
                           key={delivery.id}
@@ -264,17 +302,6 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                       <div className="flex items-center gap-1">
                         <CalendarClock size={14} />
                         <span>{formatDate(groupDeliveries[0].statusDate)}</span>
-                      </div>
-
-                      <div className="hidden sm:block text-muted-foreground">
-                        •
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <MapPin size={14} />
-                        <span className="truncate">
-                          {groupDeliveries[0].address || "כתובת לא זמינה"}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -324,6 +351,16 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                     >
                       <MessageCircle size={18} />
                     </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleNavigate(groupDeliveries[0].address)}
+                      className="flex-shrink-0 bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
+                      disabled={!groupDeliveries[0].address}
+                    >
+                      <Navigation size={18} />
+                    </Button>
                   </div>
                 </div>
               </motion.div>
@@ -351,29 +388,38 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2">
                   <DeliveryStatusBadge status={delivery.status} />
-                  <div className="flex items-center text-xs text-muted-foreground">
-                    <Package size={12} className="mr-1" />
-                    <span>{delivery.trackingNumber}</span>
+                  
+                  {/* Phone number displayed prominently */}
+                  <div className="flex items-center text-sm font-medium">
+                    <Phone size={14} className="mr-1" />
+                    <span>
+                      {formatPhoneNumberForCall(delivery.phone) || "אין מספר טלפון"}
+                    </span>
                   </div>
                 </div>
 
-                <h3 className="font-medium truncate">
+                <h3 className="font-medium text-lg">
                   {delivery.name || "לקוח ללא שם"}
                 </h3>
+
+                {/* Display address prominently */}
+                <div className="flex items-center gap-1 my-2 text-sm">
+                  <MapPin size={14} />
+                  <span className="truncate">
+                    {delivery.address || "כתובת לא זמינה"}
+                  </span>
+                </div>
+                
+                {/* Show tracking number */}
+                <div className="flex items-center text-xs text-muted-foreground mb-2">
+                  <Package size={12} className="mr-1" />
+                  <span>{delivery.trackingNumber}</span>
+                </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <CalendarClock size={14} />
                     <span>{formatDate(delivery.statusDate)}</span>
-                  </div>
-
-                  <div className="hidden sm:block text-muted-foreground">•</div>
-
-                  <div className="flex items-center gap-1">
-                    <MapPin size={14} />
-                    <span className="truncate">
-                      {delivery.address || "כתובת לא זמינה"}
-                    </span>
                   </div>
                 </div>
               </div>
@@ -416,6 +462,16 @@ const DeliveryTable: React.FC<DeliveryTableProps> = ({
                   disabled={!delivery.phone}
                 >
                   <MessageCircle size={18} />
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleNavigate(delivery.address)}
+                  className="flex-shrink-0 bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
+                  disabled={!delivery.address}
+                >
+                  <Navigation size={18} />
                 </Button>
               </div>
             </div>

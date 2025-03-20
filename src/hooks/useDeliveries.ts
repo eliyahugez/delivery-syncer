@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { Delivery } from "@/types/delivery";
 import { useAuth } from "@/context/AuthContext";
@@ -60,7 +59,13 @@ export function useDeliveries() {
       const { deliveries: fetchedDeliveries, statusOptions, lastSyncTime } = 
         await fetchDeliveries(user.sheetsUrl);
       
-      setDeliveries(fetchedDeliveries);
+      // Enhance phone numbers to international format if needed
+      const enhancedDeliveries = fetchedDeliveries.map(delivery => ({
+        ...delivery,
+        phone: formatPhoneNumber(delivery.phone)
+      }));
+      
+      setDeliveries(enhancedDeliveries);
       
       if (statusOptions && statusOptions.length > 0) {
         setDeliveryStatusOptions(statusOptions);
@@ -75,6 +80,29 @@ export function useDeliveries() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Format phone number to international format
+  const formatPhoneNumber = (phone: string): string => {
+    if (!phone) return '';
+    
+    // Remove non-digit characters
+    let digits = phone.replace(/\D/g, "");
+    
+    // Format to international format (+972)
+    if (digits.startsWith("972")) {
+      return `+${digits}`;
+    } else if (digits.startsWith("0")) {
+      return `+972${digits.substring(1)}`;
+    }
+    
+    // If it's not starting with 0 or 972, and it has 9-10 digits, assume it's a local number
+    if (digits.length >= 9 && digits.length <= 10) {
+      return `+972${digits}`;
+    }
+    
+    // Otherwise, return as is
+    return phone;
   };
 
   // Update delivery status
