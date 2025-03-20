@@ -661,11 +661,39 @@ async function processAndSaveData(sheetsData, supabase) {
       // If we don't have a tracking number, generate a unique one using an incrementing counter
       const finalTrackingNumber = trackingNumber || `AUTO-${i}`;
       
+      // Get customer name - this is the key change to ensure we get actual customer names
+      let customerName = getValueByField(values, 'name', columnMap);
+      
+      // If no customer name is found, check if there are other columns that might contain it
+      if (!customerName || customerName === finalTrackingNumber) {
+        // Look for likely customer name columns that weren't identified
+        for (let j = 0; j < values.length; j++) {
+          // Skip if this column is already mapped to something else
+          if (Object.values(columnMap).includes(j)) continue;
+          
+          const value = values[j];
+          // Check if value looks like a customer name (text, not all numbers, not too short)
+          if (value && !/^\d+$/.test(value) && value.length > 3 && value !== finalTrackingNumber) {
+            customerName = value;
+            break;
+          }
+        }
+      }
+      
+      // If still no customer name, use tracking number as fallback
+      if (!customerName || customerName.trim() === '') {
+        customerName = finalTrackingNumber;
+      }
+      
+      // Log the first few rows for debugging
+      if (i < 5) {
+        console.log(`Row ${i}: Customer name: "${customerName}", Tracking: "${finalTrackingNumber}"`);
+      }
+      
       // Get other fields from the row
       const scanDate = getValueByField(values, 'scanDate', columnMap) || new Date().toISOString();
       const statusDate = getValueByField(values, 'statusDate', columnMap) || new Date().toISOString(); 
       const status = normalizeStatus(getValueByField(values, 'status', columnMap) || 'pending');
-      const name = getValueByField(values, 'name', columnMap) || 'ללא שם';
       const phone = formatPhoneNumber(getValueByField(values, 'phone', columnMap) || '');
       const address = getValueByField(values, 'address', columnMap) || 'כתובת לא זמינה';
       const city = getValueByField(values, 'city', columnMap) || '';
@@ -684,7 +712,7 @@ async function processAndSaveData(sheetsData, supabase) {
         scanDate,
         statusDate,
         status,
-        name,
+        name: customerName, // Use the customerName we determined
         phone,
         address: fullAddress,
         assignedTo
@@ -693,10 +721,10 @@ async function processAndSaveData(sheetsData, supabase) {
       deliveries.push(delivery);
       
       // Group by customer name
-      if (!customerGroups[name]) {
-        customerGroups[name] = [];
+      if (!customerGroups[customerName]) {
+        customerGroups[customerName] = [];
       }
-      customerGroups[name].push(delivery);
+      customerGroups[customerName].push(delivery);
 
       // Prepare database record
       const dbRecord = {
@@ -705,7 +733,7 @@ async function processAndSaveData(sheetsData, supabase) {
         scan_date: new Date(scanDate).toISOString(),
         status_date: new Date(statusDate).toISOString(),
         status,
-        name,
+        name: customerName, // Use the customerName we determined
         phone,
         address: fullAddress,
         assigned_to: assignedTo,
@@ -733,7 +761,7 @@ async function processAndSaveData(sheetsData, supabase) {
             .update({
               status,
               status_date: new Date(statusDate).toISOString(),
-              name,
+              name: customerName, // Update name with correct customer name
               phone,
               address: fullAddress,
               assigned_to: assignedTo
@@ -876,7 +904,8 @@ function analyzeColumns(columns) {
     // Skip empty columns
     if (!col) return;
     
-    const lowerCol = col.toLowerCase();
+    const lowerCol = String(col).toLowerCase();
+    console.log(`Analyzing column: ${col} (${lowerCol}) at index ${index}`);
 
     // Tracking Number
     if (
@@ -887,9 +916,11 @@ function analyzeColumns(columns) {
       lowerCol.includes("order number") ||
       lowerCol.includes("order id") ||
       lowerCol.includes("track") ||
-      lowerCol.includes("מעקב")
+      lowerCol.includes("מעקב") ||
+      lowerCol === "number"
     ) {
       columnMap.trackingNumber = index;
+      console.log(`Found tracking number column at index ${index}: ${col}`);
     } 
     // Customer Name
     else if (
@@ -897,9 +928,13 @@ function analyzeColumns(columns) {
       lowerCol.includes("לקוח") ||
       lowerCol.includes("name") ||
       lowerCol.includes("customer") ||
+      lowerCol === "שם לקוח" ||
+      lowerCol === "לקוח" ||
+      lowerCol === "client" ||
       lowerCol === "name"
     ) {
       columnMap.name = index;
+      console.log(`Found customer name column at index ${index}: ${col}`);
     } 
     // Phone Number
     else if (
@@ -909,9 +944,12 @@ function analyzeColumns(columns) {
       lowerCol.includes("mobile") ||
       lowerCol.includes("מס' טלפון") ||
       lowerCol.includes("phone number") ||
-      lowerCol.includes("cell")
+      lowerCol.includes("cell") ||
+      lowerCol === "tel" ||
+      lowerCol === "phone"
     ) {
       columnMap.phone = index;
+      console.log(`Found phone column at index ${index}: ${col}`);
     } 
     // Address
     else if (
@@ -919,9 +957,11 @@ function analyzeColumns(columns) {
       lowerCol.includes("address") ||
       lowerCol.includes("location") ||
       lowerCol.includes("delivery address") ||
-      lowerCol.includes("street")
+      lowerCol.includes("street") ||
+      lowerCol === "address"
     ) {
       columnMap.address = index;
+      console.log(`Found address column at index ${index}: ${col}`);
     }
     // City
     else if (
@@ -931,6 +971,7 @@ function analyzeColumns(columns) {
       lowerCol === "city"
     ) {
       columnMap.city = index;
+      console.log(`Found city column at index ${index}: ${col}`);
     }
     // Status
     else if (
@@ -940,6 +981,7 @@ function analyzeColumns(columns) {
       lowerCol === "status"
     ) {
       columnMap.status = index;
+      console.log(`Found status column at index ${index}: ${col}`);
     } 
     // Status Date
     else if (
@@ -949,6 +991,7 @@ function analyzeColumns(columns) {
       lowerCol.includes("תאריך עדכון")
     ) {
       columnMap.statusDate = index;
+      console.log(`Found status date column at index ${index}: ${col}`);
     } 
     // Scan Date / Created Date
     else if (
@@ -962,6 +1005,7 @@ function analyzeColumns(columns) {
       lowerCol === "date"
     ) {
       columnMap.scanDate = index;
+      console.log(`Found scan date column at index ${index}: ${col}`);
     } 
     // Assigned To / Courier
     else if (
@@ -973,6 +1017,7 @@ function analyzeColumns(columns) {
       lowerCol.includes("delivery person")
     ) {
       columnMap.assignedTo = index;
+      console.log(`Found assigned to column at index ${index}: ${col}`);
     }
   });
 
@@ -991,47 +1036,63 @@ function analyzeColumns(columns) {
   
   // Make a second pass to find any columns we couldn't identify that might be useful
   // This is helpful when column names don't exactly match our patterns
-  if (columnMap.trackingNumber === -1) {
-    // Look for any column that might be a tracking number (often first or second column)
-    for (let i = 0; i < Math.min(3, columns.length); i++) {
-      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
-      columnMap.trackingNumber = i;
-      break;
-    }
-  }
   
-  // If we still couldn't find name and there's an unmapped column, use it for name
+  // If we still couldn't find name and there's an unmapped column, look for likely customer name columns
   if (columnMap.name === -1) {
     for (let i = 0; i < columns.length; i++) {
       if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
-      columnMap.name = i;
+      
+      const colValue = String(columns[i] || '').toLowerCase();
+      // Look for columns that might contain customer names
+      if (colValue.includes('customer') || colValue.includes('client') || 
+          colValue.includes('לקוח') || colValue.includes('שם')) {
+        columnMap.name = i;
+        console.log(`Inferred customer name column at index ${i}: ${columns[i]}`);
+        break;
+      }
+    }
+  }
+  
+  // If we still couldn't find tracking number, try to find it in the first few columns
+  if (columnMap.trackingNumber === -1) {
+    for (let i = 0; i < Math.min(3, columns.length); i++) {
+      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
+      columnMap.trackingNumber = i;
+      console.log(`Inferred tracking number column at index ${i}: ${columns[i]}`);
       break;
     }
   }
 
-  // If we couldn't find phone and there's an unmapped numeric column, use it for phone
+  // If we still couldn't find phone and there's an unmapped column with "phone" or similar in name
   if (columnMap.phone === -1) {
     for (let i = 0; i < columns.length; i++) {
       if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
       // Look for numeric patterns typical of phone numbers
-      if (/phone|mobile|טלפון|נייד|מספר/i.test(columns[i])) {
+      const colValue = String(columns[i] || '').toLowerCase();
+      if (colValue.includes('phone') || colValue.includes('mobile') || 
+          colValue.includes('טלפון') || colValue.includes('נייד')) {
         columnMap.phone = i;
+        console.log(`Inferred phone column at index ${i}: ${columns[i]}`);
         break;
       }
     }
   }
 
-  // If we still couldn't find address, try to identify by column name patterns
+  // If we still couldn't find address
   if (columnMap.address === -1) {
     for (let i = 0; i < columns.length; i++) {
       if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
-      if (/address|location|כתובת|מיקום|רחוב/i.test(columns[i])) {
+      const colValue = String(columns[i] || '').toLowerCase();
+      if (colValue.includes('address') || colValue.includes('location') || 
+          colValue.includes('כתובת') || colValue.includes('מיקום')) {
         columnMap.address = i;
+        console.log(`Inferred address column at index ${i}: ${columns[i]}`);
         break;
       }
     }
   }
 
+  console.log("Final column mapping:", columnMap);
   return columnMap;
 }
 

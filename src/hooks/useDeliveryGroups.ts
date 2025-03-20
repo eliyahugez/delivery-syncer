@@ -19,7 +19,10 @@ export function useDeliveryGroups(deliveries: Delivery[]) {
     const groups: Record<string, DeliveryGroup> = {};
     
     deliveries.forEach(delivery => {
-      const customerName = delivery.name || 'Unknown';
+      // Properly extract customer name, with fallback to tracking number
+      const customerName = delivery.name && delivery.name !== delivery.trackingNumber 
+        ? delivery.name 
+        : delivery.trackingNumber || 'Unknown';
       
       if (!groups[customerName]) {
         groups[customerName] = {

@@ -67,6 +67,14 @@ export function useDeliveries() {
       }));
       
       console.log("Loaded deliveries:", enhancedDeliveries.slice(0, 3));
+      
+      // Log the first few items for debugging
+      console.log("Customer groups:", enhancedDeliveries.slice(0, 5).map(d => ({
+        name: d.name,
+        tracking: d.trackingNumber,
+        phone: d.phone
+      })));
+      
       setDeliveries(enhancedDeliveries);
       
       if (statusOptions && statusOptions.length > 0) {
