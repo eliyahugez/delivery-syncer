@@ -166,7 +166,7 @@ export async function processDeliveryRow(
       externalId
     };
 
-    // Prepare database record
+    // Prepare database record - using the correct column names as defined in our SQL schema
     const dbRecord = {
       id,
       tracking_number: finalTrackingNumber,
