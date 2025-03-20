@@ -4,7 +4,7 @@ import { Delivery } from "@/types/delivery";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { saveToStorage, getFromStorage, STORAGE_KEYS } from '@/utils/localStorage';
-import { cleanSheetUrl } from '@/utils/sheetUrlUtils';
+import { cleanSheetUrl, isValidSheetUrl } from '@/utils/sheetUrlUtils';
 
 export function useFetchDeliveries(isOnline: boolean) {
   const { toast } = useToast();
@@ -18,6 +18,11 @@ export function useFetchDeliveries(isOnline: boolean) {
     try {
       let fetchedDeliveries: Delivery[] = [];
       let statusOptions = [];
+      
+      // Validate the sheets URL
+      if (!sheetsUrl || !isValidSheetUrl(sheetsUrl)) {
+        throw new Error("קישור לטבלה לא תקין או חסר. אנא הגדר קישור תקין בהגדרות המשתמש.");
+      }
       
       // First, check if we have cached data
       const cachedDataJson = localStorage.getItem(STORAGE_KEYS.DELIVERIES_CACHE);
@@ -52,6 +57,10 @@ export function useFetchDeliveries(isOnline: boolean) {
           const cleanedUrl = cleanSheetUrl(sheetsUrl);
           console.log("Using cleaned sheets URL:", cleanedUrl);
           
+          if (!cleanedUrl) {
+            throw new Error("לא ניתן לחלץ מזהה תקין מהקישור לטבלה");
+          }
+          
           // First try to get just the status options to check if the sheet is accessible
           const optionsResponse = await supabase.functions.invoke("sync-sheets", {
             body: { 
@@ -62,7 +71,9 @@ export function useFetchDeliveries(isOnline: boolean) {
           
           if (optionsResponse.error) {
             console.error("Error fetching status options:", optionsResponse.error);
-            throw new Error(`Error accessing Google Sheet: ${optionsResponse.error.message || 'Unknown error'}`);
+            
+            const errorMessage = optionsResponse.error.message || 'שגיאה בגישה לטבלה';
+            throw new Error(`שגיאה בגישה לטבלת Google: ${errorMessage}`);
           }
           
           // Now fetch the full data
@@ -76,7 +87,17 @@ export function useFetchDeliveries(isOnline: boolean) {
           
           if (response.error) {
             console.error("Supabase function error:", response.error);
-            throw new Error(response.error.message || "Error fetching deliveries from server");
+            
+            // Check for specific error types with Hebrew messages
+            let errorMessage = response.error.message || "שגיאה בטעינת נתוני משלוחים מהשרת";
+            
+            if (errorMessage.includes("column") && errorMessage.includes("does not exist")) {
+              errorMessage = "שגיאה במבנה הטבלה: עמודה חסרה או לא תקינה";
+            } else if (errorMessage.includes("Invalid") && errorMessage.includes("format")) {
+              errorMessage = "פורמט טבלה לא תקין. ודא שיש לך הרשאות גישה לטבלה.";
+            }
+            
+            throw new Error(errorMessage);
           }
           
           if (response.data?.deliveries) {
@@ -102,7 +123,7 @@ export function useFetchDeliveries(isOnline: boolean) {
             };
           } else {
             console.error("No deliveries data in response:", response.data);
-            throw new Error("No delivery data returned from server");
+            throw new Error("לא התקבלו נתוני משלוחים מהשרת");
           }
         } catch (e) {
           console.error("Error fetching from Supabase:", e);
@@ -112,11 +133,14 @@ export function useFetchDeliveries(isOnline: boolean) {
             const lastSyncStr = localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
             const lastSyncTime = lastSyncStr ? new Date(lastSyncStr) : null;
             
-            toast({
-              title: "שגיאה בסנכרון נתונים",
-              description: "מציג נתונים מהמטמון המקומי",
-              variant: "destructive",
-            });
+            // Only show toast if this is a real error, not just a first-time setup
+            if (!(e instanceof Error && e.message.includes("קישור לטבלה לא תקין או חסר"))) {
+              toast({
+                title: "שגיאה בסנכרון נתונים",
+                description: "מציג נתונים מהמטמון המקומי",
+                variant: "destructive",
+              });
+            }
             
             return {
               deliveries: cachedData,
@@ -124,7 +148,8 @@ export function useFetchDeliveries(isOnline: boolean) {
               lastSyncTime
             };
           } else {
-            throw new Error("לא ניתן לטעון משלוחים. אנא בדוק את החיבור שלך ונסה שוב.");
+            // No cached data and fetch failed - real error
+            throw new Error(e instanceof Error ? e.message : "לא ניתן לטעון משלוחים. אנא בדוק את החיבור שלך ונסה שוב.");
           }
         }
       } else {
@@ -145,9 +170,12 @@ export function useFetchDeliveries(isOnline: boolean) {
             statusOptions: cachedOptions,
             lastSyncTime
           };
-        } else {
+        } else if (!isOnline) {
           // No connection and no cached data
           throw new Error("אין חיבור לאינטרנט ולא נמצאו נתונים מקומיים");
+        } else {
+          // Online but no sheetsUrl and no cached data
+          throw new Error("קישור לטבלה לא תקין או חסר. אנא הגדר קישור תקין בהגדרות המשתמש.");
         }
       }
     } catch (err) {

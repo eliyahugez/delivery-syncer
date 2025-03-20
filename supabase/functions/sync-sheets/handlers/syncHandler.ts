@@ -5,12 +5,20 @@ import { processAndSaveData } from "../utils/sheetsDataProcessor.ts";
 export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
   console.log("Processing Google Sheets URL:", sheetsUrl);
 
+  // Validate input
+  if (!sheetsUrl || sheetsUrl.trim() === "") {
+    return {
+      status: 400,
+      body: { error: 'חסר קישור לטבלת Google Sheets' }
+    };
+  }
+
   // Extract sheets ID from URL
   const spreadsheetId = extractSheetId(sheetsUrl);
   if (!spreadsheetId) {
     return {
       status: 400,
-      body: { error: 'Invalid Google Sheets URL' }
+      body: { error: 'לא ניתן לחלץ מזהה תקין מהקישור לטבלה' }
     };
   }
 
@@ -27,6 +35,19 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
     if (response.table && response.table.rows && response.table.rows.length > 0) {
       const firstRow = response.table.rows[0];
       console.log("First row of data:", JSON.stringify(firstRow, null, 2));
+    } else {
+      console.warn("No data rows found in sheet response");
+    }
+    
+    // Check if we have data to process
+    if (!response.table || !response.table.rows || response.table.rows.length === 0) {
+      return {
+        status: 404,
+        body: { 
+          error: 'לא נמצאו נתונים בטבלה',
+          details: 'הטבלה ריקה או שאין לך הרשאות גישה אליה'
+        }
+      };
     }
     
     // Process the data and save to Supabase
@@ -47,12 +68,28 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
   } catch (error: any) {
     console.error("Error fetching/processing sheets data:", error);
     
+    // Check for specific error types
+    let errorMessage = 'שגיאה בעיבוד נתוני הטבלה';
+    let errorDetails = null;
+    
+    if (error.message?.includes("Invalid response format")) {
+      errorMessage = 'פורמט תגובה לא תקין מ-Google Sheets';
+      errorDetails = 'ייתכן שאין לך הרשאות גישה לטבלה. ודא שהטבלה משותפת לציבור לקריאה לפחות.';
+    } else if (error.message?.includes("Failed to fetch")) {
+      errorMessage = 'בעיית התחברות ל-Google Sheets';
+      errorDetails = 'בדוק את חיבור האינטרנט שלך ונסה שוב.';
+    } else if (error.message?.includes("column") && error.message?.includes("does not exist")) {
+      errorMessage = 'מבנה טבלה לא תקין';
+      errorDetails = 'חסרות עמודות נדרשות בטבלה. בדוק את מבנה הטבלה.';
+    }
+    
     // Enhanced error object to provide more details to the client
     return {
       status: 500,
       body: { 
-        error: error.message || 'Error processing Google Sheets data',
-        details: error.details || null,
+        error: errorMessage,
+        originalError: error.message || 'Error processing Google Sheets data',
+        details: errorDetails || error.details || null,
         stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : null,
         spreadsheetId 
       }
