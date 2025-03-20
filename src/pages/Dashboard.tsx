@@ -35,7 +35,7 @@ const Dashboard = () => {
   } = useDeliveries();
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [viewMode, setViewMode] = useState<"table" | "groups">("table"); // Changed default to table
+  const [viewMode, setViewMode] = useState<"table" | "groups">("groups"); // Default to groups view
   const [showImportModal, setShowImportModal] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [nearbyDeliveriesEnabled, setNearbyDeliveriesEnabled] = useState(false);

@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { v4 as uuidv4 } from "https://esm.sh/uuid@9.0.0";
@@ -840,8 +839,13 @@ function formatPhoneNumber(phone) {
     return `+972${digits.substring(1)}`;
   }
   
-  // If it's not starting with 0 or 972, assume it's a local number
-  return `+972${digits}`;
+  // If it's not starting with 0 or 972, and it has 9-10 digits, assume it's a local number
+  if (digits.length >= 9 && digits.length <= 10) {
+    return `+972${digits}`;
+  }
+  
+  // Otherwise, return as is
+  return phone;
 }
 
 // Helper function to get a value using the column mapping

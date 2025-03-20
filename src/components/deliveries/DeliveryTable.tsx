@@ -1,483 +1,289 @@
 
-import React, { useState, useEffect } from "react";
-import { useToast } from "@/components/ui/use-toast";
-import { Delivery } from "@/types/delivery";
-import { Phone, CalendarClock, MapPin, Package, User, MessageCircle, Navigation } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import DeliveryStatusBadge from "./DeliveryStatusBadge";
-import { motion, AnimatePresence } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/context/AuthContext";
+import React, { useState, useMemo } from 'react';
+import { Button } from '@/components/ui/button';
+import { Delivery } from '@/types/delivery';
+import DeliveryStatusBadge from './DeliveryStatusBadge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ChevronDown, ChevronUp, Phone, MessageSquare, Navigation } from 'lucide-react';
+import { DeliveryStatusOption } from '@/hooks/useDeliveries';
 
 interface DeliveryTableProps {
   deliveries: Delivery[];
-  onUpdateStatus: (id: string, newStatus: string, updateType?: string) => Promise<void>;
+  onUpdateStatus: (id: string, newStatus: string, updateType?: string) => void;
   isLoading: boolean;
   sheetsUrl?: string;
-  statusOptions?: Array<{ value: string; label: string }>;
+  statusOptions: DeliveryStatusOption[];
 }
 
-const DeliveryTable: React.FC<DeliveryTableProps> = ({
+const DeliveryTable = ({
   deliveries,
   onUpdateStatus,
   isLoading,
-  sheetsUrl,
-  statusOptions = [
-    { value: "pending", label: "ממתין" },
-    { value: "in_progress", label: "בדרך" },
-    { value: "delivered", label: "נמסר" },
-    { value: "failed", label: "נכשל" },
-    { value: "returned", label: "הוחזר" },
-  ]
-}) => {
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [localStatusOptions, setLocalStatusOptions] = useState(statusOptions);
+  statusOptions,
+}: DeliveryTableProps) => {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const [filter, setFilter] = useState('');
 
-  // Fetch status options from Google Sheet when available
-  useEffect(() => {
-    const fetchStatusOptions = async () => {
-      if (!sheetsUrl) return;
-      
-      try {
-        const response = await supabase.functions.invoke('sync-sheets', {
-          body: {
-            action: 'getStatusOptions',
-            sheetsUrl
-          }
-        });
-        
-        if (response.data?.statusOptions && response.data.statusOptions.length > 0) {
-          setLocalStatusOptions(response.data.statusOptions);
-        }
-      } catch (error) {
-        console.error('Error fetching status options:', error);
+  // Group the deliveries by customer name
+  const customerGroups = useMemo(() => {
+    const groups: Record<string, Delivery[]> = {};
+    
+    deliveries.forEach(delivery => {
+      const name = delivery.name || 'Unknown';
+      if (!groups[name]) {
+        groups[name] = [];
       }
-    };
+      groups[name].push(delivery);
+    });
     
-    fetchStatusOptions();
-  }, [sheetsUrl]);
+    return groups;
+  }, [deliveries]);
 
-  // Handle status change for a single delivery or a group of deliveries
-  const handleStatusChange = async (
-    id: string,
-    newStatus: string,
-    updateType: string = "single"
-  ) => {
-    // Set the delivery as updating
-    setUpdatingId(id);
+  // Filtered deliveries
+  const filteredGroups = useMemo(() => {
+    if (!filter) return customerGroups;
+    
+    const filtered: Record<string, Delivery[]> = {};
+    
+    Object.entries(customerGroups).forEach(([name, customerDeliveries]) => {
+      // Check if customer name matches filter
+      if (name.toLowerCase().includes(filter.toLowerCase())) {
+        filtered[name] = customerDeliveries;
+        return;
+      }
+      
+      // Check if any of this customer's deliveries match filter
+      const matchingDeliveries = customerDeliveries.filter(delivery => 
+        delivery.trackingNumber.toLowerCase().includes(filter.toLowerCase()) ||
+        delivery.address.toLowerCase().includes(filter.toLowerCase()) ||
+        delivery.phone.toLowerCase().includes(filter.toLowerCase())
+      );
+      
+      if (matchingDeliveries.length > 0) {
+        filtered[name] = matchingDeliveries;
+      }
+    });
+    
+    return filtered;
+  }, [customerGroups, filter]);
 
-    try {
-      // Update the status using the onUpdateStatus callback
-      await onUpdateStatus(id, newStatus, updateType);
-
-      toast({
-        title: "סטטוס עודכן",
-        description: updateType === "batch" 
-          ? "סטטוס כל המשלוחים של לקוח זה עודכן בהצלחה"
-          : "סטטוס המשלוח עודכן בהצלחה",
-      });
-    } catch (error) {
-      console.error("Error updating status:", error);
-      toast({
-        title: "שגיאה בעדכון",
-        description: "לא ניתן לעדכן את הסטטוס כרגע",
-        variant: "destructive",
-      });
-    } finally {
-      // Clear updating state
-      setUpdatingId(null);
-    }
+  const toggleExpand = (id: string) => {
+    setExpandedId(expandedId === id ? null : id);
   };
 
-  const handlePhoneCall = (phone: string) => {
-    if (!phone) {
-      toast({
-        title: "מספר טלפון חסר",
-        description: "לא נמצא מספר טלפון למשלוח זה",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Format phone number to international format
-    const formattedPhone = formatPhoneNumberForCall(phone);
-    window.open(`tel:${formattedPhone}`);
+  const toggleCustomer = (name: string) => {
+    setExpandedCustomer(expandedCustomer === name ? null : name);
   };
 
-  // Format phone number to international format
-  const formatPhoneNumberForCall = (phone: string): string => {
-    if (!phone) return "";
-    
-    // Remove non-digit characters
-    let formattedPhone = phone.replace(/\D/g, "");
-    
-    // Format to international format (+972)
-    if (formattedPhone.startsWith("972")) {
-      return `+${formattedPhone}`;
-    } else if (formattedPhone.startsWith("0")) {
-      return `+972${formattedPhone.substring(1)}`;
-    }
-    
-    // If it doesn't start with 0 or 972, assume it's a local number and add the country code
-    return `+972${formattedPhone}`;
+  const handleWhatsApp = (phone: string) => {
+    // Format the phone number (remove +, spaces, etc.)
+    const formattedPhone = phone.replace(/\D/g, '');
+    const message = encodeURIComponent('היי זה שליח');
+    window.open(`https://wa.me/${formattedPhone}?text=${message}`, '_blank');
   };
 
-  // Add WhatsApp message handler
-  const handleWhatsAppMessage = (phone: string) => {
-    if (!phone) {
-      toast({
-        title: "מספר טלפון חסר",
-        description: "לא נמצא מספר טלפון למשלוח זה",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Format phone number for WhatsApp
-    const formattedPhone = formatPhoneNumberForWhatsApp(phone);
+  const handleNavigation = (address: string) => {
+    // Open in navigation app
+    const encodedAddress = encodeURIComponent(address);
     
-    // Create WhatsApp link with predefined message
-    const message = "היי זה שליח";
-    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  };
-
-  // Format phone number for WhatsApp (no plus sign)
-  const formatPhoneNumberForWhatsApp = (phone: string): string => {
-    if (!phone) return "";
-    
-    // Remove non-digit characters and the plus sign if present
-    let formattedPhone = phone.replace(/\D/g, "");
-    
-    // Format for WhatsApp (no plus sign)
-    if (formattedPhone.startsWith("972")) {
-      return formattedPhone;
-    } else if (formattedPhone.startsWith("0")) {
-      return `972${formattedPhone.substring(1)}`;
-    }
-    
-    // If it doesn't start with 0 or 972, assume it's a local number and add the country code
-    return `972${formattedPhone}`;
-  };
-
-  // Handle navigation to the address
-  const handleNavigate = (address: string) => {
-    if (!address) {
-      toast({
-        title: "כתובת חסרה",
-        description: "לא נמצאה כתובת למשלוח זה",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Open Google Maps with the address
-    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-    window.open(mapsUrl, '_blank');
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "";
-
-    try {
-      const date = new Date(dateString);
-      return new Intl.DateTimeFormat("he-IL", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(date);
-    } catch (e) {
-      return dateString;
+    // Check if on mobile device
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // On mobile, try to use native maps app
+      window.open(`https://maps.google.com/maps?q=${encodedAddress}&directionsmode=driving`, '_blank');
+    } else {
+      // On desktop, open in Google Maps
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
     }
   };
 
   if (isLoading) {
     return (
-      <div className="glass p-8 rounded-xl flex flex-col items-center justify-center min-h-[300px]">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-muted-foreground">טוען משלוחים...</p>
+      <div className="flex justify-center items-center h-64">
+        <div className="loader animate-spin w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full"></div>
       </div>
     );
   }
 
   if (!deliveries.length) {
     return (
-      <div className="glass p-8 rounded-xl text-center">
-        <h3 className="text-xl font-medium mb-2">אין משלוחים</h3>
-        <p className="text-muted-foreground">לא נמצאו משלוחים לתצוגה</p>
+      <div className="text-center my-12">
+        <p className="text-lg text-gray-500">אין משלוחים להצגה</p>
       </div>
     );
   }
 
-  // Group deliveries by customer name
-  const groupedDeliveries = deliveries.reduce((acc, delivery) => {
-    // Use customer name as the grouping key, fallback to 'לא משויך' if name is empty
-    const group = delivery.name ? delivery.name.trim() : "לא משויך";
-    if (!acc[group]) {
-      acc[group] = [];
-    }
-    acc[group].push(delivery);
-    return acc;
-  }, {} as Record<string, Delivery[]>);
-
-  // If we have grouped deliveries, display them in sections
-  if (Object.keys(groupedDeliveries).length > 1) {
-    return (
-      <div className="space-y-6">
-        {Object.entries(groupedDeliveries).map(([group, groupDeliveries]) => (
-          <div key={group} className="space-y-4">
-            <div className="flex items-center gap-2">
-              <User size={16} />
-              <h3 className="text-lg font-medium">{group}</h3>
-              <Badge 
-                variant={groupDeliveries.length > 1 ? "default" : "outline"} 
-                className={`ml-2 ${groupDeliveries.length > 1 ? "bg-amber-500" : ""}`}
-              >
-                {groupDeliveries.length} משלוחים
-              </Badge>
-            </div>
-
-            <AnimatePresence>
-              <motion.div
-                key={group}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3 }}
-                className="glass p-4 rounded-xl"
-              >
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      {/* Use the status of the first delivery in the group */}
-                      <DeliveryStatusBadge status={groupDeliveries[0].status} />
-                      
-                      {/* Phone number displayed prominently */}
-                      <div className="flex items-center text-sm font-medium">
-                        <Phone size={14} className="mr-1" />
-                        <span>
-                          {formatPhoneNumberForCall(groupDeliveries[0].phone) || "אין מספר טלפון"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <h3 className="font-medium text-lg">
-                      {group || "לקוח ללא שם"}
-                    </h3>
-
-                    {/* Display address prominently */}
-                    <div className="flex items-center gap-1 my-2 text-sm">
-                      <MapPin size={14} />
-                      <span className="truncate">
-                        {groupDeliveries[0].address || "כתובת לא זמינה"}
-                      </span>
-                    </div>
-
-                    {/* Display all tracking numbers */}
-                    <div className="flex flex-wrap gap-1 my-2">
-                      {groupDeliveries.map((delivery, idx) => (
-                        <Badge
-                          key={delivery.id}
-                          variant="outline"
-                          className="text-xs"
-                        >
-                          {delivery.trackingNumber}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <CalendarClock size={14} />
-                        <span>{formatDate(groupDeliveries[0].statusDate)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-end md:self-center w-full md:w-auto">
-                    <Select
-                      onValueChange={(value) =>
-                        handleStatusChange(
-                          groupDeliveries[0].id,
-                          value,
-                          "batch"
-                        )
-                      }
-                      defaultValue={groupDeliveries[0].status}
-                      disabled={groupDeliveries.some(
-                        (d) => updatingId === d.id
-                      )}
-                    >
-                      <SelectTrigger className="w-[120px]">
-                        <SelectValue placeholder="סטטוס" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {localStatusOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handlePhoneCall(groupDeliveries[0].phone)}
-                      className="flex-shrink-0"
-                      disabled={!groupDeliveries[0].phone}
-                    >
-                      <Phone size={18} />
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleWhatsAppMessage(groupDeliveries[0].phone)}
-                      className="flex-shrink-0 bg-green-50 hover:bg-green-100 text-green-600 border-green-200"
-                      disabled={!groupDeliveries[0].phone}
-                    >
-                      <MessageCircle size={18} />
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleNavigate(groupDeliveries[0].address)}
-                      className="flex-shrink-0 bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
-                      disabled={!groupDeliveries[0].address}
-                    >
-                      <Navigation size={18} />
-                    </Button>
-                  </div>
-                </div>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  // Fallback to the standard display if there's no grouping
   return (
-    <div className="space-y-4">
-      <AnimatePresence>
-        {deliveries.map((delivery, index) => (
-          <motion.div
-            key={delivery.id || index}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
-            className="glass p-4 rounded-xl"
-          >
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <DeliveryStatusBadge status={delivery.status} />
-                  
-                  {/* Phone number displayed prominently */}
-                  <div className="flex items-center text-sm font-medium">
-                    <Phone size={14} className="mr-1" />
-                    <span>
-                      {formatPhoneNumberForCall(delivery.phone) || "אין מספר טלפון"}
-                    </span>
-                  </div>
-                </div>
-
-                <h3 className="font-medium text-lg">
-                  {delivery.name || "לקוח ללא שם"}
-                </h3>
-
-                {/* Display address prominently */}
-                <div className="flex items-center gap-1 my-2 text-sm">
-                  <MapPin size={14} />
-                  <span className="truncate">
-                    {delivery.address || "כתובת לא זמינה"}
-                  </span>
-                </div>
-                
-                {/* Show tracking number */}
-                <div className="flex items-center text-xs text-muted-foreground mb-2">
-                  <Package size={12} className="mr-1" />
-                  <span>{delivery.trackingNumber}</span>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <CalendarClock size={14} />
-                    <span>{formatDate(delivery.statusDate)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-end md:self-center w-full md:w-auto">
-                <Select
-                  onValueChange={(value) =>
-                    handleStatusChange(delivery.id, value)
-                  }
-                  defaultValue={delivery.status}
-                  disabled={updatingId === delivery.id}
+    <div className="w-full overflow-auto rounded-md border">
+      <Table className="min-w-full">
+        <TableHeader className="bg-muted/50">
+          <TableRow className="hover:bg-muted/50">
+            <TableHead className="w-20">פעולות</TableHead>
+            <TableHead>פרטי לקוח</TableHead>
+            <TableHead className="w-[200px]">סטטוס</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Object.entries(filteredGroups).map(([customerName, customerDeliveries]) => {
+            const hasMultipleDeliveries = customerDeliveries.length > 1;
+            const isCustomerExpanded = expandedCustomer === customerName;
+            
+            return (
+              <React.Fragment key={customerName}>
+                <TableRow 
+                  className={`hover:bg-muted/20 cursor-pointer ${hasMultipleDeliveries ? 'font-semibold' : ''}`}
+                  onClick={() => toggleCustomer(customerName)}
                 >
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="סטטוס" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {localStatusOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <TableCell className="p-2">
+                    <div className="flex space-x-1 rtl:space-x-reverse">
+                      {hasMultipleDeliveries && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          {isCustomerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="p-3">
+                    <div className="flex flex-col">
+                      <div className="font-bold text-base">{customerName}</div>
+                      <div className="flex items-center mt-1 space-x-2 rtl:space-x-reverse">
+                        <div className="flex items-center">
+                          <span className="text-sm text-gray-600">
+                            {customerDeliveries[0].phone}
+                          </span>
+                        </div>
+                        {customerDeliveries[0].phone && (
+                          <div className="flex space-x-1 rtl:space-x-reverse">
+                            <Button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleWhatsApp(customerDeliveries[0].phone);
+                              }}
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7 px-2 text-xs"
+                            >
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              וואטסאפ
+                            </Button>
+                            <Button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`tel:${customerDeliveries[0].phone}`, '_blank');
+                              }}
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Phone className="h-3 w-3 mr-1" />
+                              חייג
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-1 text-sm">
+                        {customerDeliveries[0].address}
+                        <Button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleNavigation(customerDeliveries[0].address);
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs mr-2"
+                        >
+                          <Navigation className="h-3 w-3 mr-1" />
+                          נווט
+                        </Button>
+                      </div>
+                      {hasMultipleDeliveries && (
+                        <div className="mt-1 bg-blue-50 p-1 rounded-sm text-xs text-blue-700">
+                          {customerDeliveries.length} משלוחים ללקוח זה
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="p-3">
+                    <div className="flex flex-col">
+                      <DeliveryStatusBadge status={customerDeliveries[0].status} />
+                      <div className="text-xs mt-1 text-gray-500">
+                        מספר מעקב: {customerDeliveries[0].trackingNumber}
+                      </div>
+                      <div className="mt-2">
+                        {statusOptions.map((option) => (
+                          <Button
+                            key={option.value}
+                            size="sm"
+                            variant={customerDeliveries[0].status === option.value ? "default" : "outline"}
+                            className="h-7 px-2 text-xs mr-1 mb-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onUpdateStatus(
+                                customerDeliveries[0].id, 
+                                option.value,
+                                hasMultipleDeliveries ? "batch" : "single"
+                              );
+                            }}
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
 
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handlePhoneCall(delivery.phone)}
-                  className="flex-shrink-0"
-                  disabled={!delivery.phone}
-                >
-                  <Phone size={18} />
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleWhatsAppMessage(delivery.phone)}
-                  className="flex-shrink-0 bg-green-50 hover:bg-green-100 text-green-600 border-green-200"
-                  disabled={!delivery.phone}
-                >
-                  <MessageCircle size={18} />
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleNavigate(delivery.address)}
-                  className="flex-shrink-0 bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
-                  disabled={!delivery.address}
-                >
-                  <Navigation size={18} />
-                </Button>
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </AnimatePresence>
+                {/* Show other deliveries for this customer when expanded */}
+                {isCustomerExpanded && hasMultipleDeliveries && customerDeliveries.slice(1).map(delivery => (
+                  <TableRow 
+                    key={delivery.id} 
+                    className="hover:bg-muted/10 bg-gray-50"
+                  >
+                    <TableCell className="p-2"></TableCell>
+                    <TableCell className="p-3 pl-8">
+                      <div className="flex flex-col">
+                        <div className="font-medium text-sm">
+                          מספר מעקב: {delivery.trackingNumber}
+                        </div>
+                        <div className="text-xs mt-1 text-gray-500">
+                          {delivery.address}
+                          <Button
+                            onClick={() => handleNavigation(delivery.address)}
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs mr-2"
+                          >
+                            <Navigation className="h-3 w-3 mr-1" />
+                            נווט
+                          </Button>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="p-3">
+                      <div className="flex flex-col">
+                        <DeliveryStatusBadge status={delivery.status} />
+                        <div className="mt-2">
+                          {statusOptions.map((option) => (
+                            <Button
+                              key={option.value}
+                              size="sm"
+                              variant={delivery.status === option.value ? "default" : "outline"}
+                              className="h-7 px-2 text-xs mr-1 mb-1"
+                              onClick={() => onUpdateStatus(delivery.id, option.value)}
+                            >
+                              {option.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 };
