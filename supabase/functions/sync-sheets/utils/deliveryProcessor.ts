@@ -62,7 +62,23 @@ export async function processDeliveryRow(
     }
 
     // Extract delivery data using column mapping
-    const trackingNumber = getValueByField(values, 'trackingNumber', columnMap);
+    let trackingNumber = getValueByField(values, 'trackingNumber', columnMap);
+    
+    // Log raw value for debugging
+    console.log(`Raw tracking number: ${trackingNumber}, Row: ${index}`);
+    
+    // Look for valid tracking numbers that match the TM format pattern
+    if (!trackingNumber || trackingNumber === '' || trackingNumber.startsWith('Date(')) {
+      // Check all cells for a value that looks like a tracking number with TM prefix
+      for (let i = 0; i < values.length; i++) {
+        const value = values[i];
+        if (value && (value.startsWith('TM') || value.startsWith('GWD'))) {
+          trackingNumber = value;
+          console.log(`Found tracking number in column ${i}: ${trackingNumber}`);
+          break;
+        }
+      }
+    }
     
     // Skip duplicate tracking numbers
     if (trackingNumber && seenTrackingNumbers.has(trackingNumber)) {
@@ -136,18 +152,25 @@ export async function processDeliveryRow(
     // Get external ID if available (might be used for syncing with external systems)
     const externalId = getValueByField(values, 'externalId', columnMap) || finalTrackingNumber;
     
-    // If address is empty but we have other columns that might contain address data
+    // If address is empty, look for address data across all columns
     if (!address || address === 'כתובת לא זמינה') {
-      // Try to find another column with text that might be an address
+      console.log(`Looking for address in row ${index}`);
+      
+      // Try all columns that have at least 10 characters and might look like addresses
       for (let j = 0; j < values.length; j++) {
         // Skip if this column is already mapped to something else
         if (Object.values(columnMap).includes(j)) continue;
         
         const value = values[j];
-        // Check if value looks like an address (contains numbers and text, is reasonably long)
-        if (value && value.length > 8 && /\d/.test(value) && /[א-ת]/.test(value)) {
-          address = value;
-          break;
+        // Check if value looks like an address based on length and content
+        if (value && value.length > 10 && (/[א-ת]/.test(value) || /\d/.test(value))) {
+          // Avoid using values that are clearly not addresses
+          if (!value.startsWith('GWD') && !value.startsWith('TM') && 
+              !value.startsWith('Date') && !/^\d+$/.test(value)) {
+            address = value;
+            console.log(`Found potential address in column ${j}: ${address.substring(0, 30)}...`);
+            break;
+          }
         }
       }
     }

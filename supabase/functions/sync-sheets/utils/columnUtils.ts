@@ -64,7 +64,9 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
       lowerCol === "number" ||
       lowerCol.includes("מס'") ||
       lowerCol.includes("barcode") ||
-      lowerCol.includes("ברקוד")
+      lowerCol.includes("ברקוד") ||
+      lowerCol.includes("tm") ||
+      lowerCol.includes("gwd")
     ) {
       if (columnMap.trackingNumber === -1) columnMap.trackingNumber = index;
     } 
@@ -105,7 +107,8 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
       lowerCol.includes("delivery address") ||
       lowerCol.includes("street") ||
       lowerCol === "address" ||
-      lowerCol.includes("רחוב")
+      lowerCol.includes("רחוב") ||
+      lowerCol.includes("מיקום")
     ) {
       if (columnMap.address === -1) columnMap.address = index;
     }
@@ -165,6 +168,9 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
     }
   });
 
+  // Print all columns for debugging
+  console.log("All available columns:", columns);
+  
   // Make a third pass to check for any column that might contain customer data
   // This is especially helpful for identifying the correct name column
   if (columnMap.name === -1) {
@@ -203,7 +209,7 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
   if (columnMap.scanDate === -1 && columnMap.statusDate === -1) {
     columns.forEach((col, index) => {
       // Skip already mapped columns
-      if (Object.values(columnMap).includes(index)) return;
+      if (Object.values(columnMap).includes(index)) continue;
       
       const lowerCol = String(col).toLowerCase();
       if (lowerCol.includes("date") || lowerCol.includes("תאריך")) {
@@ -217,8 +223,26 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
 
   // Last resort for tracking number: use the first column if nothing better found
   if (columnMap.trackingNumber === -1) {
-    columnMap.trackingNumber = 0;
-    console.log(`Using first column as tracking number fallback: ${columns[0]}`);
+    // Look for a column that contains TM or GWD to identify tracking numbers
+    let trackingColumnFound = false;
+    columns.forEach((col, index) => {
+      // Skip if this column is already mapped to something else
+      if (Object.values(columnMap).includes(index)) return;
+      
+      // Check each row for TM or GWD patterns that are common for tracking numbers
+      if (col && (col.includes('TM') || col.includes('GWD'))) {
+        columnMap.trackingNumber = index;
+        trackingColumnFound = true;
+        console.log(`Found likely tracking number column: ${col} at index ${index}`);
+        return;
+      }
+    });
+    
+    // If still not found, use the first column as fallback
+    if (!trackingColumnFound) {
+      columnMap.trackingNumber = 0;
+      console.log(`Using first column as tracking number fallback: ${columns[0]}`);
+    }
   }
 
   // Log the final mapping for debugging

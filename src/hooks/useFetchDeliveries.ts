@@ -79,7 +79,8 @@ export function useFetchDeliveries(isOnline: boolean) {
           // Now fetch the full data
           const response = await supabase.functions.invoke("sync-sheets", {
             body: { 
-              sheetsUrl: cleanedUrl
+              sheetsUrl: cleanedUrl,
+              forceRefresh: true // Add this to force refresh data and bypass caching
             }
           });
           
@@ -115,6 +116,12 @@ export function useFetchDeliveries(isOnline: boolean) {
             localStorage.setItem(STORAGE_KEYS.DELIVERIES_CACHE, JSON.stringify(fetchedDeliveries));
             const now = new Date();
             localStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toISOString());
+            
+            toast({
+              title: "סנכרון נתונים הושלם",
+              description: `נטענו ${fetchedDeliveries.length} משלוחים מהשרת`,
+              variant: "default",
+            });
             
             return {
               deliveries: fetchedDeliveries,
