@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   Card,
@@ -11,7 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DeliveryStatusBadge } from './DeliveryStatusBadge';
+import DeliveryStatusBadge from './DeliveryStatusBadge';
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -261,13 +260,15 @@ const DeliveryGroups: React.FC<DeliveryGroupsProps> = ({
       )}
       
       {/* Add responsive styling */}
-      <style jsx>{`
+      <style>
+        {`
         @media (max-width: 640px) {
           .hide-on-mobile {
             display: none;
           }
         }
-      `}</style>
+        `}
+      </style>
     </div>
   );
 };

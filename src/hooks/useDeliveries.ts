@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useOfflineMode } from './useOfflineMode';
 import { useSyncDeliveries } from './useSyncDeliveries';
 import { useDeliveryGroups } from './useDeliveryGroups';
+import { supabase } from "@/integrations/supabase/client";
 
 export interface DeliveryStatusOption {
   value: string;
