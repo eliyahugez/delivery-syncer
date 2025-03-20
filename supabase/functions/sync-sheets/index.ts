@@ -1,6 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { v4 as uuidv4 } from "https://esm.sh/uuid@9.0.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -248,10 +249,11 @@ serve(async (req) => {
 });
 
 // Helper function to extract sheet ID from URL - enhanced to handle more URL formats
-function extractSheetId(url: string): string | null {
+function extractSheetId(url) {
+  if (!url) return null;
+  
   console.log("Extracting sheet ID from URL:", url);
   
-  // Handle different URL formats
   try {
     // Format: /d/{spreadsheetId}/
     const regex1 = /\/d\/([a-zA-Z0-9-_]+)/;
@@ -293,7 +295,7 @@ function extractSheetId(url: string): string | null {
 }
 
 // Function to fetch data from Google Sheets
-async function fetchSheetsData(spreadsheetId: string): Promise<any> {
+async function fetchSheetsData(spreadsheetId) {
   // Using the sheets API with json output
   const apiUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json`;
   
@@ -344,11 +346,11 @@ async function fetchSheetsData(spreadsheetId: string): Promise<any> {
 
 // New function to update Google Sheets for a batch of deliveries by customer name
 async function updateGoogleSheetsForBatchUpdate(
-  sheetsUrl: string,
-  customerName: string,
-  newStatus: string,
-  trackingNumbers: string[]
-): Promise<void> {
+  sheetsUrl,
+  customerName,
+  newStatus,
+  trackingNumbers
+) {
   try {
     console.log(`Updating Google Sheets for customer ${customerName} with ${trackingNumbers.length} deliveries`);
     
@@ -366,14 +368,14 @@ async function updateGoogleSheetsForBatchUpdate(
     }
     
     // Find status and tracking number columns
-    const columns = data.table.cols.map((col: any) => col.label || "");
+    const columns = data.table.cols.map((col) => col.label || "");
     
-    const trackingColIndex = columns.findIndex((col: string) => 
+    const trackingColIndex = columns.findIndex((col) => 
       col.toLowerCase().includes("track") || 
       col.toLowerCase().includes("מעקב") || 
       col.toLowerCase().includes("מספר משלוח"));
       
-    const statusColIndex = columns.findIndex((col: string) => 
+    const statusColIndex = columns.findIndex((col) => 
       col.toLowerCase().includes("status") || 
       col.toLowerCase().includes("סטטוס") || 
       col.toLowerCase().includes("מצב"));
@@ -399,10 +401,10 @@ async function updateGoogleSheetsForBatchUpdate(
 
 // New function to update a single delivery in Google Sheets
 async function updateGoogleSheets(
-  sheetsUrl: string,
-  trackingNumber: string,
-  newStatus: string
-): Promise<void> {
+  sheetsUrl,
+  trackingNumber,
+  newStatus
+) {
   try {
     console.log(`Updating Google Sheets for tracking number ${trackingNumber} to status ${newStatus}`);
     
@@ -420,14 +422,14 @@ async function updateGoogleSheets(
     }
     
     // Find status and tracking number columns
-    const columns = data.table.cols.map((col: any) => col.label || "");
+    const columns = data.table.cols.map((col) => col.label || "");
     
-    const trackingColIndex = columns.findIndex((col: string) => 
+    const trackingColIndex = columns.findIndex((col) => 
       col.toLowerCase().includes("track") || 
       col.toLowerCase().includes("מעקב") || 
       col.toLowerCase().includes("מספר משלוח"));
       
-    const statusColIndex = columns.findIndex((col: string) => 
+    const statusColIndex = columns.findIndex((col) => 
       col.toLowerCase().includes("status") || 
       col.toLowerCase().includes("סטטוס") || 
       col.toLowerCase().includes("מצב"));
@@ -450,7 +452,7 @@ async function updateGoogleSheets(
 }
 
 // Enhanced function to fetch status options from the Google Sheet
-async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
+async function fetchStatusOptionsFromSheets(sheetsUrl) {
   try {
     console.log(`Fetching status options from: ${sheetsUrl}`);
     const spreadsheetId = extractSheetId(sheetsUrl);
@@ -467,7 +469,7 @@ async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
     }
 
     // Try to find a status column
-    const statusColumnIndex = data.table.cols.findIndex((col: any) => {
+    const statusColumnIndex = data.table.cols.findIndex((col) => {
       const label = (col.label || "").toLowerCase();
       return label.includes("status") || label.includes("סטטוס") || label.includes("מצב");
     });
@@ -487,14 +489,14 @@ async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
 
     // Extract unique status values
     const uniqueStatuses = new Set();
-    data.table.rows.forEach((row: any) => {
+    data.table.rows.forEach((row) => {
       if (row.c && row.c[statusColumnIndex] && row.c[statusColumnIndex].v) {
         uniqueStatuses.add(row.c[statusColumnIndex].v);
       }
     });
 
     // Convert to the expected format
-    const options = Array.from(uniqueStatuses).map((status: any) => {
+    const options = Array.from(uniqueStatuses).map((status) => {
       const normalizedStatus = normalizeStatus(status);
       return { 
         value: normalizedStatus, 
@@ -545,7 +547,7 @@ async function fetchStatusOptionsFromSheets(sheetsUrl: string): Promise<any[]> {
 }
 
 // Helper function to get Hebrew label for status
-function getHebrewLabel(normalizedStatus: string, originalStatus: string): string {
+function getHebrewLabel(normalizedStatus, originalStatus) {
   // First try to use the original status if it's in Hebrew
   if (/[\u0590-\u05FF]/.test(originalStatus)) {
     return originalStatus;
@@ -563,12 +565,14 @@ function getHebrewLabel(normalizedStatus: string, originalStatus: string): strin
 }
 
 // Function to process Google Sheets data and save to Supabase
-async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> {
+async function processAndSaveData(sheetsData, supabase) {
+  console.log("Processing sheet data...");
+  
   if (!sheetsData || !sheetsData.table || !sheetsData.table.rows || !sheetsData.table.cols) {
     throw new Error('Invalid Google Sheets data structure');
   }
 
-  const columns = sheetsData.table.cols.map((col: any) => col.label || col.id);
+  const columns = sheetsData.table.cols.map((col) => col.label || "");
   console.log('Detected columns:', columns);
 
   // Map columns to our expected fields
@@ -577,97 +581,140 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
 
   const rows = sheetsData.table.rows;
   const deliveries = [];
-  const customerGroups: Record<string, any[]> = {};
+  const customerGroups = {};
+  
+  // Check if we have valid data in the sheet
+  if (rows.length === 0) {
+    throw new Error('No data found in the Google Sheet');
+  }
+  
+  console.log(`Processing ${rows.length} rows from sheet`);
+  
+  // Track failed rows for debugging
+  const failedRows = [];
   
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    if (!row.c) continue;
-
-    const values = row.c.map((cell: any) => cell?.v || '');
-    if (values.every((v: any) => v === '')) continue;
-
-    // Extract delivery data using column mapping
-    const trackingNumber = getValueByField(values, 'trackingNumber', columnMap) || `unknown-${i}`;
-    const scanDate = getValueByField(values, 'scanDate', columnMap) || new Date().toISOString();
-    const statusDate = getValueByField(values, 'statusDate', columnMap) || new Date().toISOString(); 
-    const status = normalizeStatus(getValueByField(values, 'status', columnMap) || 'pending');
-    const name = getValueByField(values, 'name', columnMap) || 'ללא שם';
-    const phone = getValueByField(values, 'phone', columnMap) || '';
-    const address = getValueByField(values, 'address', columnMap) || 'כתובת לא זמינה';
-    const assignedTo = getValueByField(values, 'assignedTo', columnMap) || 'לא שויך';
-
-    // Generate a unique ID (or check if it exists in the database already)
-    const id = `${trackingNumber}-${i}`;
-
-    // Create the delivery object for the response
-    const delivery = {
-      id,
-      trackingNumber,
-      scanDate,
-      statusDate,
-      status,
-      name,
-      phone,
-      address,
-      assignedTo
-    };
-
-    deliveries.push(delivery);
     
-    // Group by customer name
-    if (!customerGroups[name]) {
-      customerGroups[name] = [];
-    }
-    customerGroups[name].push(delivery);
+    try {
+      if (!row.c) {
+        failedRows.push({ index: i, reason: 'Row has no cells' });
+        continue;
+      }
 
-    // Prepare database record
-    const dbRecord = {
-      id,
-      tracking_number: trackingNumber,
-      scan_date: new Date(scanDate).toISOString(),
-      status_date: new Date(statusDate).toISOString(),
-      status,
-      name,
-      phone,
-      address,
-      assigned_to: assignedTo,
-      external_id: trackingNumber  // Use tracking number as external_id for easier reference
-    };
-
-    // Upsert delivery record
-    const { error } = await supabase
-      .from('deliveries')
-      .upsert(dbRecord, { onConflict: 'id' });
-
-    if (error) {
-      console.error(`Error upserting delivery ${id}:`, error);
-    } else {
-      console.log(`Successfully upserted delivery ${id}`);
+      // Extract values from each cell, handling null/undefined values
+      const values = row.c.map(cell => {
+        if (!cell) return '';
+        return cell.v !== undefined && cell.v !== null ? String(cell.v) : '';
+      });
       
-      // Create a history entry for new deliveries
-      const { data: existing } = await supabase
-        .from('delivery_history')
-        .select('id')
-        .eq('delivery_id', id)
-        .limit(1);
+      // Skip completely empty rows
+      if (values.every(v => v === '')) {
+        failedRows.push({ index: i, reason: 'Row is empty' });
+        continue;
+      }
+
+      // Extract delivery data using column mapping
+      const trackingNumber = getValueByField(values, 'trackingNumber', columnMap);
+      
+      // If we don't have a tracking number, generate a unique one using an incrementing counter
+      const finalTrackingNumber = trackingNumber || `AUTO-${i}`;
+      
+      // Get other fields from the row
+      const scanDate = getValueByField(values, 'scanDate', columnMap) || new Date().toISOString();
+      const statusDate = getValueByField(values, 'statusDate', columnMap) || new Date().toISOString(); 
+      const status = normalizeStatus(getValueByField(values, 'status', columnMap) || 'pending');
+      const name = getValueByField(values, 'name', columnMap) || 'ללא שם';
+      const phone = getValueByField(values, 'phone', columnMap) || '';
+      const address = getValueByField(values, 'address', columnMap) || 'כתובת לא זמינה';
+      const assignedTo = getValueByField(values, 'assignedTo', columnMap) || 'לא שויך';
+
+      // Generate a UUID for the delivery ID (instead of using string IDs which can cause DB errors)
+      const id = uuidv4();
+
+      // Create the delivery object for the response
+      const delivery = {
+        id,
+        trackingNumber: finalTrackingNumber,
+        scanDate,
+        statusDate,
+        status,
+        name,
+        phone,
+        address,
+        assignedTo
+      };
+
+      deliveries.push(delivery);
+      
+      // Group by customer name
+      if (!customerGroups[name]) {
+        customerGroups[name] = [];
+      }
+      customerGroups[name].push(delivery);
+
+      // Prepare database record
+      const dbRecord = {
+        id,
+        tracking_number: finalTrackingNumber,
+        scan_date: new Date(scanDate).toISOString(),
+        status_date: new Date(statusDate).toISOString(),
+        status,
+        name,
+        phone,
+        address,
+        assigned_to: assignedTo,
+        external_id: finalTrackingNumber  // Use tracking number as external_id for easier reference
+      };
+
+      // Upsert delivery record
+      const { error } = await supabase
+        .from('deliveries')
+        .upsert(dbRecord, { onConflict: 'tracking_number' });
+
+      if (error) {
+        console.error(`Error upserting delivery ${id}:`, error);
+        failedRows.push({ index: i, reason: `DB error: ${error.message}`, data: dbRecord });
+      } else {
+        console.log(`Successfully upserted delivery ${id} with tracking ${finalTrackingNumber}`);
         
-      if (!existing || existing.length === 0) {
-        const { error: historyError } = await supabase
+        // Create a history entry for new deliveries
+        const { data: existing } = await supabase
           .from('delivery_history')
-          .insert({
-            delivery_id: id,
-            status,
-            timestamp: new Date().toISOString(),
-            courier: assignedTo
-          });
+          .select('id')
+          .eq('delivery_id', id)
+          .limit(1);
           
-        if (historyError) {
-          console.error(`Error creating history for ${id}:`, historyError);
-        } else {
-          console.log(`Created history entry for ${id}`);
+        if (!existing || existing.length === 0) {
+          const { error: historyError } = await supabase
+            .from('delivery_history')
+            .insert({
+              delivery_id: id,
+              status,
+              timestamp: new Date().toISOString(),
+              courier: assignedTo
+            });
+            
+          if (historyError) {
+            console.error(`Error creating history for ${id}:`, historyError);
+          } else {
+            console.log(`Created history entry for ${id}`);
+          }
         }
       }
+    } catch (error) {
+      console.error(`Error processing row ${i}:`, error);
+      failedRows.push({ index: i, reason: error.message });
     }
+  }
+
+  // If all rows failed, throw an error
+  if (failedRows.length === rows.length) {
+    throw new Error(`Failed to process all ${rows.length} rows. Check sheet format.`);
+  }
+  
+  if (failedRows.length > 0) {
+    console.error(`Failed to process ${failedRows.length} out of ${rows.length} rows:`, failedRows);
   }
 
   // Save column mappings
@@ -692,12 +739,13 @@ async function processAndSaveData(sheetsData: any, supabase: any): Promise<any> 
       count: customerGroups[name].length
     })),
     statusOptions,
-    count: deliveries.length
+    count: deliveries.length,
+    failedRows: failedRows.length > 0 ? failedRows : undefined
   };
 }
 
 // Helper function to get a value using the column mapping
-function getValueByField(values: any[], field: string, columnMap: Record<string, number>): string {
+function getValueByField(values, field, columnMap) {
   const index = columnMap[field];
   if (index !== undefined && index >= 0 && index < values.length) {
     return String(values[index] || '');
@@ -705,9 +753,9 @@ function getValueByField(values: any[], field: string, columnMap: Record<string,
   return '';
 }
 
-// Simple column analyzer
-function analyzeColumns(columns: string[]): Record<string, number> {
-  const columnMap: Record<string, number> = {
+// Enhanced column analyzer for better detection
+function analyzeColumns(columns) {
+  const columnMap = {
     trackingNumber: -1,
     name: -1,
     phone: -1,
@@ -718,117 +766,208 @@ function analyzeColumns(columns: string[]): Record<string, number> {
     assignedTo: -1,
   };
 
+  // Look for column headers that match our expected fields
   columns.forEach((col, index) => {
+    // Skip empty columns
+    if (!col) return;
+    
     const lowerCol = col.toLowerCase();
 
+    // Tracking Number
     if (
       lowerCol.includes("מספר מעקב") ||
       lowerCol.includes("tracking") ||
       lowerCol.includes("מספר משלוח") ||
-      lowerCol.includes("הזמנה")
+      lowerCol.includes("מספר הזמנה") ||
+      lowerCol.includes("order number") ||
+      lowerCol.includes("order id") ||
+      lowerCol.includes("track") ||
+      lowerCol.includes("מעקב")
     ) {
       columnMap.trackingNumber = index;
-    } else if (
+    } 
+    // Customer Name
+    else if (
       lowerCol.includes("שם") ||
       lowerCol.includes("לקוח") ||
       lowerCol.includes("name") ||
-      lowerCol.includes("customer")
+      lowerCol.includes("customer") ||
+      lowerCol === "name"
     ) {
       columnMap.name = index;
-    } else if (
+    } 
+    // Phone Number
+    else if (
       lowerCol.includes("טלפון") ||
       lowerCol.includes("נייד") ||
       lowerCol.includes("phone") ||
-      lowerCol.includes("mobile")
+      lowerCol.includes("mobile") ||
+      lowerCol.includes("מס' טלפון") ||
+      lowerCol.includes("phone number")
     ) {
       columnMap.phone = index;
-    } else if (
+    } 
+    // Address
+    else if (
       lowerCol.includes("כתובת") ||
       lowerCol.includes("address") ||
-      lowerCol.includes("location")
+      lowerCol.includes("location") ||
+      lowerCol.includes("delivery address")
     ) {
       columnMap.address = index;
-    } else if (
+    } 
+    // Status
+    else if (
       lowerCol.includes("סטטוס") ||
       lowerCol.includes("status") ||
-      lowerCol.includes("מצב")
+      lowerCol.includes("מצב") ||
+      lowerCol === "status"
     ) {
       columnMap.status = index;
-    } else if (
+    } 
+    // Status Date
+    else if (
       lowerCol.includes("תאריך סטטוס") ||
       lowerCol.includes("status date") ||
-      lowerCol.includes("עדכון")
+      lowerCol.includes("עדכון סטטוס") ||
+      lowerCol.includes("תאריך עדכון")
     ) {
       columnMap.statusDate = index;
-    } else if (
+    } 
+    // Scan Date / Created Date
+    else if (
       lowerCol.includes("תאריך סריקה") ||
       lowerCol.includes("scan date") ||
-      lowerCol.includes("נוצר")
+      lowerCol.includes("נוצר") ||
+      lowerCol.includes("תאריך יצירה") ||
+      lowerCol.includes("date") ||
+      lowerCol.includes("תאריך") ||
+      lowerCol === "date scanned" ||
+      lowerCol === "date"
     ) {
       columnMap.scanDate = index;
-    } else if (
+    } 
+    // Assigned To / Courier
+    else if (
       lowerCol.includes("שליח") ||
       lowerCol.includes("מחלק") ||
       lowerCol.includes("assigned") ||
       lowerCol.includes("courier") ||
-      lowerCol.includes("driver")
+      lowerCol.includes("driver") ||
+      lowerCol.includes("delivery person")
     ) {
       columnMap.assignedTo = index;
     }
   });
 
+  // If we couldn't find status date, use scan date as a fallback
+  if (columnMap.statusDate === -1 && columnMap.scanDate !== -1) {
+    columnMap.statusDate = columnMap.scanDate;
+  }
+
+  // If we couldn't find scan date, use status date as a fallback
+  if (columnMap.scanDate === -1 && columnMap.statusDate !== -1) {
+    columnMap.scanDate = columnMap.statusDate;
+  }
+  
+  // Make a second pass to find any columns we couldn't identify that might be useful
+  // This is helpful when column names don't exactly match our patterns
+  if (columnMap.trackingNumber === -1) {
+    // Look for any column that might be a tracking number (often first or second column)
+    for (let i = 0; i < Math.min(3, columns.length); i++) {
+      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
+      columnMap.trackingNumber = i;
+      break;
+    }
+  }
+  
+  // If we still couldn't find name and there's an unmapped column, use it for name
+  if (columnMap.name === -1) {
+    for (let i = 0; i < columns.length; i++) {
+      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
+      columnMap.name = i;
+      break;
+    }
+  }
+
   return columnMap;
 }
 
-// Function to normalize status values
-function normalizeStatus(status: string): string {
-  const statusLower = status.toLowerCase();
+// Enhanced function to normalize status values
+function normalizeStatus(status) {
+  if (!status) return "pending";
+  
+  const statusLower = String(status).toLowerCase();
 
+  // Delivered states
   if (
     statusLower.includes("delivered") ||
     statusLower.includes("נמסר") ||
     statusLower.includes("completed") ||
-    statusLower.includes("הושלם")
+    statusLower.includes("הושלם") ||
+    statusLower.includes("נמסרה") ||
+    statusLower.includes("נמסרו") ||
+    statusLower.includes("complete") ||
+    statusLower.includes("done")
   ) {
     return "delivered";
   }
+  
+  // Pending states
   if (
     statusLower.includes("pending") ||
     statusLower.includes("ממתין") ||
     statusLower.includes("waiting") ||
     statusLower.includes("new") ||
-    statusLower.includes("חדש")
+    statusLower.includes("חדש") ||
+    statusLower.includes("open") ||
+    statusLower.includes("created")
   ) {
     return "pending";
   }
+  
+  // In progress states
   if (
     statusLower.includes("in_progress") ||
+    statusLower.includes("progress") ||
     statusLower.includes("בדרך") ||
     statusLower.includes("out for delivery") ||
     statusLower.includes("בדרך למסירה") ||
     statusLower.includes("delivery in progress") ||
-    statusLower.includes("בתהליך")
+    statusLower.includes("בתהליך") ||
+    statusLower.includes("בדרכו") ||
+    statusLower.includes("נשלח")
   ) {
     return "in_progress";
   }
+  
+  // Failed states
   if (
     statusLower.includes("failed") ||
     statusLower.includes("נכשל") ||
     statusLower.includes("customer not answer") ||
     statusLower.includes("לקוח לא ענה") ||
     statusLower.includes("problem") ||
-    statusLower.includes("בעיה")
+    statusLower.includes("בעיה") ||
+    statusLower.includes("error") ||
+    statusLower.includes("cancelled") ||
+    statusLower.includes("מבוטל")
   ) {
     return "failed";
   }
+  
+  // Returned states
   if (
     statusLower.includes("return") ||
     statusLower.includes("חבילה חזרה") ||
     statusLower.includes("החזרה") ||
-    statusLower.includes("הוחזר")
+    statusLower.includes("הוחזר") ||
+    statusLower.includes("sent back") ||
+    statusLower.includes("חזר")
   ) {
     return "returned";
   }
 
+  // Default to pending for unknown status
   return "pending";
 }
