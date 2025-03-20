@@ -3,7 +3,8 @@ import { useCallback } from 'react';
 import { Delivery } from "@/types/delivery";
 import { useToast } from "@/components/ui/use-toast";
 import { useOfflineMode } from './useOfflineMode';
-import { useSyncDeliveries } from './useSyncDeliveries';
+import { useLocalDeliveryUpdates } from './useLocalDeliveryUpdates';
+import { useSyncPendingUpdates } from './useSyncPendingUpdates';
 import { supabase } from "@/integrations/supabase/client";
 
 export function useDeliveryStatusUpdates(
@@ -11,8 +12,9 @@ export function useDeliveryStatusUpdates(
   setDeliveries: (deliveries: Delivery[]) => void
 ) {
   const { toast } = useToast();
-  const { isOnline, addOfflineChange } = useOfflineMode();
-  const { updateLocalDeliveries, syncPendingUpdates } = useSyncDeliveries();
+  const { isOnline, addOfflineChange, getOfflineChanges, clearOfflineChanges, markChangeFailed } = useOfflineMode();
+  const { updateLocalDeliveries } = useLocalDeliveryUpdates();
+  const { syncPendingUpdates } = useSyncPendingUpdates(isOnline, getOfflineChanges, clearOfflineChanges, markChangeFailed);
 
   // Update delivery status
   const updateStatus = useCallback(async (

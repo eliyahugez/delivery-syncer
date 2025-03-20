@@ -1,8 +1,10 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { Delivery } from "@/types/delivery";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
-import { useSyncDeliveries } from './useSyncDeliveries';
+import { useFetchDeliveries } from './useFetchDeliveries';
+import { useOfflineMode } from './useOfflineMode';
 import { saveToStorage, getFromStorage, STORAGE_KEYS } from '@/utils/localStorage';
 
 export function useDeliveryData() {
@@ -20,7 +22,8 @@ export function useDeliveryData() {
     { value: "returned", label: "הוחזר" }
   ]);
 
-  const { fetchDeliveries } = useSyncDeliveries();
+  const { isOnline } = useOfflineMode();
+  const { fetchDeliveries } = useFetchDeliveries(isOnline);
 
   // Format phone number to international format
   const formatPhoneNumber = (phone: string): string => {
