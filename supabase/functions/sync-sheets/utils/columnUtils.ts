@@ -1,3 +1,4 @@
+
 // Helper function to get a value using the column mapping
 export function getValueByField(values: any[], field: string, columnMap: Record<string, number>): string {
   const index = columnMap[field];
@@ -32,8 +33,39 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
     
     const lowerCol = String(col).toLowerCase().trim();
     
+    // Primary column detection - high priority exact matches
+    if (index === 1 && (lowerCol.includes("gwd") || lowerCol === "" || lowerCol.includes("tracking"))) {
+      // Column 1 is typically the tracking number in many sheets
+      columnMap.trackingNumber = index;
+      console.log(`Found tracking number by position in column 1: ${index}`);
+    }
+    
+    if (index === 5 && (lowerCol.includes("address") || lowerCol === "" || lowerCol.includes("כתובת"))) {
+      // Column 5 is typically the address in many sheets
+      columnMap.address = index;
+      console.log(`Found address by position in column 5: ${index}`);
+    }
+    
+    if (index === 6 && (lowerCol.includes("name") || lowerCol === "" || lowerCol.includes("שם"))) {
+      // Column 6 is typically the name in many sheets
+      columnMap.name = index;
+      console.log(`Found name by position in column 6: ${index}`);
+    }
+    
+    if (index === 7 && (lowerCol.includes("phone") || lowerCol === "" || lowerCol.includes("טלפון"))) {
+      // Column 7 is typically the phone in many sheets
+      columnMap.phone = index;
+      console.log(`Found phone by position in column 7: ${index}`);
+    }
+    
+    if (index === 4 && (lowerCol.includes("status") || lowerCol === "" || lowerCol.includes("סטטוס"))) {
+      // Column 4 is typically the status in many sheets
+      columnMap.status = index;
+      console.log(`Found status by position in column 4: ${index}`);
+    }
+    
     // Check for tracking number column - looking for מספר מעקב or similar
-    if (lowerCol === "מספר מעקב" || lowerCol === "tm" || lowerCol === "מס' מעקב") {
+    if (lowerCol === "מספר מעקב" || lowerCol === "tm" || lowerCol === "מס' מעקב" || lowerCol.includes("gwd")) {
       columnMap.trackingNumber = index;
       console.log(`Found tracking number column: "${col}" at index ${index}`);
     }
@@ -91,68 +123,45 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
     }
   });
 
-  // Now add more flexible matching for columns we couldn't identify precisely
+  // Check for empty mapping and try harder to detect columns by position
   if (columnMap.trackingNumber === -1) {
-    // Try to find tracking number column - typically starts with TM or contains numbers
-    for (let i = 0; i < columns.length; i++) {
-      const colSample = getColumnSample(i);
-      if (colSample && (colSample.includes('TM') || colSample.includes('GWD'))) {
-        columnMap.trackingNumber = i;
-        console.log(`Inferred tracking number column at index ${i} based on TM/GWD pattern`);
-        break;
-      }
+    // For this specific sheet, column 1 seems to be tracking number
+    if (columns.length > 1) {
+      columnMap.trackingNumber = 1;
+      console.log("Setting tracking number to column 1 by default");
     }
   }
-
-  // If we still couldn't identify key columns, use heuristics based on typical sheet structures
-  if (columnMap.name === -1) {
-    // Customer name is often in columns 1-3
-    for (let i = 0; i < Math.min(3, columns.length); i++) {
-      if (!Object.values(columnMap).includes(i)) {
-        columnMap.name = i;
-        console.log(`Assigning name column by position: ${columns[i]} at index ${i}`);
-        break;
-      }
-    }
-  }
-
-  if (columnMap.address === -1) {
-    // Address is often a longer text field
-    for (let i = 0; i < columns.length; i++) {
-      if (!Object.values(columnMap).includes(i)) {
-        const colSample = getColumnSample(i);
-        if (colSample && colSample.length > 15 && colSample.includes(' ')) {
-          columnMap.address = i;
-          console.log(`Inferred address column at index ${i} based on text length`);
-          break;
-        }
-      }
-    }
-  }
-
-  // Special handling for date columns
-  if (columnMap.scanDate === -1) {
-    for (let i = 0; i < columns.length; i++) {
-      if (!Object.values(columnMap).includes(i) && columns[i] && columns[i].includes('תאריך')) {
-        columnMap.scanDate = i;
-        console.log(`Found date column for scan date: ${columns[i]} at index ${i}`);
-        break;
-      }
-    }
-  }
-
-  // Last resort fallbacks - make assumptions based on column positions if nothing found
-  if (columnMap.trackingNumber === -1 && columns.length > 0) {
-    columnMap.trackingNumber = 0; // First column often contains tracking numbers
-    console.log(`Using first column as tracking number fallback: ${columns[0]}`);
-  }
-
-  // Final validation - make sure we have at least the essential columns
-  const essentialColumns = ['trackingNumber', 'name'];
-  const missingEssentials = essentialColumns.filter(col => columnMap[col] === -1);
   
-  if (missingEssentials.length > 0) {
-    console.warn(`Could not identify these essential columns: ${missingEssentials.join(', ')}`);
+  if (columnMap.name === -1) {
+    // For this specific sheet, column 6 seems to be customer name
+    if (columns.length > 6) {
+      columnMap.name = 6;
+      console.log("Setting name to column 6 by default");
+    }
+  }
+  
+  if (columnMap.address === -1) {
+    // For this specific sheet, column 5 seems to be address
+    if (columns.length > 5) {
+      columnMap.address = 5;
+      console.log("Setting address to column 5 by default");
+    }
+  }
+  
+  if (columnMap.status === -1) {
+    // For this specific sheet, column 4 seems to be status
+    if (columns.length > 4) {
+      columnMap.status = 4;
+      console.log("Setting status to column 4 by default");
+    }
+  }
+  
+  if (columnMap.phone === -1) {
+    // For this specific sheet, column 7 seems to be phone
+    if (columns.length > 7) {
+      columnMap.phone = 7;
+      console.log("Setting phone to column 7 by default");
+    }
   }
 
   // Log the final mapping for debugging

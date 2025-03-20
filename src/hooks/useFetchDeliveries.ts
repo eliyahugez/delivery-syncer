@@ -76,7 +76,8 @@ export function useFetchDeliveries(isOnline: boolean) {
             throw new Error(`שגיאה בגישה לטבלת Google: ${errorMessage}`);
           }
           
-          // Now fetch the full data
+          // Now fetch the full data with force refresh flag if needed
+          console.log(`Fetching deliveries with forceRefresh=${forceRefresh}`);
           const response = await supabase.functions.invoke("sync-sheets", {
             body: { 
               sheetsUrl: cleanedUrl,
@@ -117,11 +118,25 @@ export function useFetchDeliveries(isOnline: boolean) {
             const now = new Date();
             localStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toISOString());
             
+            const deliveryCount = fetchedDeliveries.length;
+            
             toast({
-              title: "סנכרון נתונים הושלם",
-              description: `נטענו ${fetchedDeliveries.length} משלוחים מהשרת`,
-              variant: "default",
+              title: `סנכרון נתונים הושלם`,
+              description: `נטענו ${deliveryCount} משלוחים מהשרת`,
+              variant: deliveryCount > 0 ? "default" : "destructive",
             });
+            
+            if (deliveryCount === 0 && response.data.failedRows && response.data.failedRows.length > 0) {
+              // Show error about failed rows
+              console.error("Failed rows:", response.data.failedRows);
+              
+              const firstError = response.data.failedRows[0].reason;
+              toast({
+                title: "שגיאה בעיבוד נתונים",
+                description: `שגיאה: ${firstError}. נכשלו ${response.data.failedRows.length} שורות.`,
+                variant: "destructive",
+              });
+            }
             
             return {
               deliveries: fetchedDeliveries,
@@ -130,6 +145,16 @@ export function useFetchDeliveries(isOnline: boolean) {
             };
           } else {
             console.error("No deliveries data in response:", response.data);
+            
+            // If there's an error message, show it
+            if (response.data?.error) {
+              toast({
+                title: "שגיאה בעיבוד נתונים",
+                description: response.data.error,
+                variant: "destructive",
+              });
+            }
+            
             throw new Error("לא התקבלו נתוני משלוחים מהשרת");
           }
         } catch (e) {

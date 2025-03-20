@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/context/AuthContext";
 import { isValidSheetUrl, cleanSheetUrl } from '@/utils/sheetUrlUtils';
+import { RefreshCw } from 'lucide-react';
 
 interface SheetsUrlSetterProps {
   onSync: () => void;
@@ -15,6 +16,7 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
   const { user, updateUserProfile } = useAuth();
   const [urlInput, setUrlInput] = useState(user?.sheetsUrl || "");
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   
@@ -99,6 +101,26 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
     }
   };
 
+  const handleForceSync = () => {
+    setIsSyncing(true);
+    try {
+      onSync();
+      toast({
+        title: "מסנכרן נתונים מחדש",
+        description: "גורם לסנכרון מלא של כל הנתונים מהטבלה",
+        variant: "default",
+      });
+    } catch (e) {
+      toast({
+        title: "שגיאה בסנכרון",
+        description: e instanceof Error ? e.message : "אירעה שגיאה בסנכרון הנתונים",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="flex flex-col space-y-4">
       <h2 className="text-lg font-semibold">קישור לטבלת Google Sheets</h2>
@@ -118,19 +140,36 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
           הקישור צריך להיות בפורמט: https://docs.google.com/spreadsheets/d/SHEET_ID/edit
         </div>
       </div>
-      <Button onClick={handleSaveClick} disabled={isSaving}>
-        {isSaving ? "שומר..." : "שמור קישור"}
-      </Button>
-      
-      {urlInput && isValidSheetUrl(urlInput) && (
-        <Button 
-          variant="outline" 
-          type="button" 
-          onClick={onSync}
-          className="mt-2"
-        >
-          סנכרן עכשיו עם כוח (Force Refresh)
+      <div className="flex gap-2">
+        <Button onClick={handleSaveClick} disabled={isSaving}>
+          {isSaving ? "שומר..." : "שמור קישור"}
         </Button>
+        
+        {urlInput && isValidSheetUrl(urlInput) && (
+          <Button 
+            variant="outline" 
+            type="button" 
+            onClick={handleForceSync}
+            className="flex items-center gap-1"
+            disabled={isSyncing}
+          >
+            <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
+            סנכרן עם כוח (Force Refresh)
+          </Button>
+        )}
+      </div>
+      
+      {user?.sheetsUrl && (
+        <div className="mt-4 p-3 bg-slate-50 rounded-md border border-slate-200">
+          <h3 className="text-md font-medium">טיפים לסנכרון</h3>
+          <ul className="list-disc mr-5 mt-2 text-sm text-slate-700">
+            <li>וודא שיש הרשאות ציבוריות לצפייה בגיליון</li>
+            <li>אם אין נתונים שמופיעים, נסה ללחוץ על "סנכרן עם כוח"</li>
+            <li>וודא שיש עמודה עם מספרי מעקב בפורמט GWD או TM</li>
+            <li>וודא שיש כתובות תקינות בעמודה 5</li>
+            <li>וודא שיש שמות לקוחות בעמודה 6</li>
+          </ul>
+        </div>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
+
 import { getValueByField } from "./columnUtils.ts";
 import { normalizeStatus } from "./statusUtils.ts";
-import { v4 as uuidv4 } from "https://deno.land/std@0.177.0/uuid/mod.ts";
+import { v4 as uuid } from "https://deno.land/std@0.177.0/uuid/mod.ts";
 
 // Process a single row from Google Sheets into a delivery object
 export async function processDeliveryRow(
@@ -146,6 +147,9 @@ export async function processDeliveryRow(
     }
     seenTrackingNumbers.add(trackingNumber);
     
+    // Generate a unique ID for the delivery
+    const id = uuid();
+    
     // Create the delivery record
     const deliveryRecord = {
       tracking_number: trackingNumber,
@@ -162,7 +166,7 @@ export async function processDeliveryRow(
     
     // Create the delivery object for the return value
     const delivery = {
-      id: uuidv4(),
+      id,
       trackingNumber,
       status,
       name: name || 'ללא שם',
