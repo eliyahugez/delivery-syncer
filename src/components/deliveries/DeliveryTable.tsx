@@ -30,7 +30,8 @@ const DeliveryTable = ({
     const groups: Record<string, Delivery[]> = {};
     
     deliveries.forEach(delivery => {
-      const name = delivery.name || 'Unknown';
+      // Use name as the key for grouping, or fallback to tracking number if name is empty
+      const name = delivery.name && delivery.name.trim() ? delivery.name : delivery.trackingNumber;
       if (!groups[name]) {
         groups[name] = [];
       }
@@ -56,8 +57,8 @@ const DeliveryTable = ({
       // Check if any of this customer's deliveries match filter
       const matchingDeliveries = customerDeliveries.filter(delivery => 
         delivery.trackingNumber.toLowerCase().includes(filter.toLowerCase()) ||
-        delivery.address.toLowerCase().includes(filter.toLowerCase()) ||
-        delivery.phone.toLowerCase().includes(filter.toLowerCase())
+        (delivery.address && delivery.address.toLowerCase().includes(filter.toLowerCase())) ||
+        (delivery.phone && delivery.phone.toLowerCase().includes(filter.toLowerCase()))
       );
       
       if (matchingDeliveries.length > 0) {
@@ -113,6 +114,12 @@ const DeliveryTable = ({
     );
   }
 
+  console.log("Customer groups:", Object.entries(filteredGroups).map(([name, deliveries]) => ({
+    name,
+    count: deliveries.length,
+    sample: deliveries[0]
+  })));
+
   return (
     <div className="w-full overflow-auto rounded-md border">
       <Table className="min-w-full">
@@ -127,6 +134,7 @@ const DeliveryTable = ({
           {Object.entries(filteredGroups).map(([customerName, customerDeliveries]) => {
             const hasMultipleDeliveries = customerDeliveries.length > 1;
             const isCustomerExpanded = expandedCustomer === customerName;
+            const delivery = customerDeliveries[0]; // First delivery for this customer
             
             return (
               <React.Fragment key={customerName}>
@@ -149,15 +157,15 @@ const DeliveryTable = ({
                       <div className="flex items-center mt-1 space-x-2 rtl:space-x-reverse">
                         <div className="flex items-center">
                           <span className="text-sm text-gray-600">
-                            {customerDeliveries[0].phone}
+                            {delivery.phone || 'אין מספר טלפון'}
                           </span>
                         </div>
-                        {customerDeliveries[0].phone && (
+                        {delivery.phone && (
                           <div className="flex space-x-1 rtl:space-x-reverse">
                             <Button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleWhatsApp(customerDeliveries[0].phone);
+                                handleWhatsApp(delivery.phone);
                               }}
                               variant="outline" 
                               size="sm" 
@@ -169,7 +177,7 @@ const DeliveryTable = ({
                             <Button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                window.open(`tel:${customerDeliveries[0].phone}`, '_blank');
+                                window.open(`tel:${delivery.phone}`, '_blank');
                               }}
                               variant="outline" 
                               size="sm" 
@@ -182,19 +190,24 @@ const DeliveryTable = ({
                         )}
                       </div>
                       <div className="mt-1 text-sm">
-                        {customerDeliveries[0].address}
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleNavigation(customerDeliveries[0].address);
-                          }}
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs mr-2"
-                        >
-                          <Navigation className="h-3 w-3 mr-1" />
-                          נווט
-                        </Button>
+                        {delivery.address || 'אין כתובת'}
+                        {delivery.address && (
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleNavigation(delivery.address);
+                            }}
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs mr-2"
+                          >
+                            <Navigation className="h-3 w-3 mr-1" />
+                            נווט
+                          </Button>
+                        )}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        מספר מעקב: {delivery.trackingNumber}
                       </div>
                       {hasMultipleDeliveries && (
                         <div className="mt-1 bg-blue-50 p-1 rounded-sm text-xs text-blue-700">
@@ -205,21 +218,18 @@ const DeliveryTable = ({
                   </TableCell>
                   <TableCell className="p-3">
                     <div className="flex flex-col">
-                      <DeliveryStatusBadge status={customerDeliveries[0].status} />
-                      <div className="text-xs mt-1 text-gray-500">
-                        מספר מעקב: {customerDeliveries[0].trackingNumber}
-                      </div>
+                      <DeliveryStatusBadge status={delivery.status} />
                       <div className="mt-2">
                         {statusOptions.map((option) => (
                           <Button
                             key={option.value}
                             size="sm"
-                            variant={customerDeliveries[0].status === option.value ? "default" : "outline"}
+                            variant={delivery.status === option.value ? "default" : "outline"}
                             className="h-7 px-2 text-xs mr-1 mb-1"
                             onClick={(e) => {
                               e.stopPropagation();
                               onUpdateStatus(
-                                customerDeliveries[0].id, 
+                                delivery.id, 
                                 option.value,
                                 hasMultipleDeliveries ? "batch" : "single"
                               );
@@ -246,16 +256,18 @@ const DeliveryTable = ({
                           מספר מעקב: {delivery.trackingNumber}
                         </div>
                         <div className="text-xs mt-1 text-gray-500">
-                          {delivery.address}
-                          <Button
-                            onClick={() => handleNavigation(delivery.address)}
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2 text-xs mr-2"
-                          >
-                            <Navigation className="h-3 w-3 mr-1" />
-                            נווט
-                          </Button>
+                          {delivery.address || 'אין כתובת'}
+                          {delivery.address && (
+                            <Button
+                              onClick={() => handleNavigation(delivery.address)}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs mr-2"
+                            >
+                              <Navigation className="h-3 w-3 mr-1" />
+                              נווט
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </TableCell>

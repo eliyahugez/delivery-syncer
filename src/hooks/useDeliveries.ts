@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { Delivery } from "@/types/delivery";
 import { useAuth } from "@/context/AuthContext";
@@ -65,6 +66,7 @@ export function useDeliveries() {
         phone: formatPhoneNumber(delivery.phone)
       }));
       
+      console.log("Loaded deliveries:", enhancedDeliveries.slice(0, 3));
       setDeliveries(enhancedDeliveries);
       
       if (statusOptions && statusOptions.length > 0) {
