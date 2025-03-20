@@ -30,7 +30,26 @@ export async function processDeliveryRow(
     // Extract values from each cell, handling null/undefined values
     const values = row.c.map((cell: any) => {
       if (!cell) return '';
-      return cell.v !== undefined && cell.v !== null ? String(cell.v) : '';
+      
+      // Handle date objects from Google Sheets
+      if (cell.v !== undefined && cell.v !== null) {
+        // Check if it's a date string (Google Sheets format)
+        if (typeof cell.v === 'string' && cell.v.startsWith('Date(')) {
+          try {
+            // Parse Date(yyyy,m,d) format - note months are 0-indexed in JS Date
+            const dateMatch = cell.v.match(/Date\((\d+),(\d+),(\d+)\)/);
+            if (dateMatch) {
+              const [_, year, month, day] = dateMatch;
+              const date = new Date(parseInt(year), parseInt(month)-1, parseInt(day));
+              return date.toLocaleDateString('he-IL'); // Format as Israeli date
+            }
+          } catch (e) {
+            console.log("Error parsing date:", cell.v);
+          }
+        }
+        return String(cell.v);
+      }
+      return '';
     });
     
     // Skip completely empty rows
@@ -65,6 +84,11 @@ export async function processDeliveryRow(
     // Get customer name
     let customerName = getValueByField(values, 'name', columnMap);
     
+    // Check if customer name looks like a date string and handle it
+    if (customerName && (customerName.startsWith('Date(') || /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(customerName))) {
+      customerName = `לקוח משלוח ${index + 1}`;
+    }
+    
     // If no customer name is found, or if the customer name is the same as the tracking number,
     // check if there are other columns that might contain it
     if (!customerName || customerName === finalTrackingNumber || customerName.startsWith('GWD') || customerName.startsWith('AUTO-')) {
@@ -77,6 +101,8 @@ export async function processDeliveryRow(
         // Check if value looks like a customer name (text, not all numbers, not too short, not a tracking number)
         if (value && 
             !/^\d+$/.test(value) && 
+            !value.startsWith('Date(') &&
+            !value.startsWith('/') &&
             value.length > 2 && 
             value !== finalTrackingNumber &&
             !value.startsWith('GWD') &&
@@ -93,7 +119,8 @@ export async function processDeliveryRow(
         customerName.trim() === '' || 
         customerName === finalTrackingNumber || 
         customerName.startsWith('GWD') || 
-        customerName.startsWith('AUTO-')) {
+        customerName.startsWith('AUTO-') ||
+        customerName.startsWith('Date(')) {
       customerName = `לקוח משלוח ${index + 1}`;
     }
     
@@ -180,7 +207,7 @@ export async function processDeliveryRow(
       external_id: externalId
     };
 
-    // Check if this tracking number already exists in the database - fix the query to match schema
+    // Check if this tracking number already exists in the database
     try {
       const { data: existingDelivery, error: lookupError } = await supabase
         .from('deliveries')
