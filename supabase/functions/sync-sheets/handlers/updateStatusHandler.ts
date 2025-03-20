@@ -4,7 +4,7 @@ import { extractSheetId } from "../utils/sheetUtils.ts";
 import { normalizeStatus } from "../utils/statusUtils.ts";
 
 // Function to handle status updates for a single delivery
-export async function handleStatusUpdate(
+export async function handleSingleStatusUpdate(
   supabase: any,
   deliveryId: string,
   newStatus: string,
@@ -20,7 +20,63 @@ export async function handleStatusUpdate(
     if (updateType === "batch") {
       return await handleBatchStatusUpdate(supabase, deliveryId, normalizedStatus, sheetsUrl);
     } else {
-      return await handleSingleStatusUpdate(supabase, deliveryId, normalizedStatus, sheetsUrl);
+      // Handle single delivery update
+      console.log(`Updating single delivery ${deliveryId} to status ${normalizedStatus}`);
+      
+      // Get the delivery details
+      const { data: delivery, error: fetchError } = await supabase
+        .from('deliveries')
+        .select('*')
+        .eq('id', deliveryId)
+        .maybeSingle();
+        
+      if (fetchError || !delivery) {
+        console.error('Error fetching delivery:', fetchError);
+        return {
+          status: 404,
+          body: { error: 'Delivery not found' }
+        };
+      }
+      
+      const now = new Date().toISOString();
+      const { error: updateError } = await supabase
+        .from('deliveries')
+        .update({ status: normalizedStatus, status_date: now })
+        .eq('id', deliveryId);
+        
+      if (updateError) {
+        console.error('Error updating delivery:', updateError);
+        return {
+          status: 500,
+          body: { error: 'Failed to update delivery' }
+        };
+      }
+      
+      const { error: historyError } = await supabase
+        .from('delivery_history')
+        .insert({
+          delivery_id: deliveryId,
+          status: normalizedStatus,
+          timestamp: now
+        });
+      
+      if (historyError) {
+        console.error('Error creating history entry:', historyError);
+      }
+      
+      // Update Google Sheets if a URL is provided
+      if (sheetsUrl && delivery.tracking_number) {
+        try {
+          await updateGoogleSheets(sheetsUrl, delivery.tracking_number, normalizedStatus);
+        } catch (sheetError) {
+          console.error("Error updating Google Sheets:", sheetError);
+        }
+      }
+      
+      return {
+        status: 200,
+        body: { success: true, message: 'Delivery updated' }
+      };
     }
   } catch (error: any) {
     console.error("Error in handleStatusUpdate:", error);
@@ -29,71 +85,6 @@ export async function handleStatusUpdate(
       body: { error: error.message || "An unknown error occurred" }
     };
   }
-}
-
-// Function to handle status updates for a single delivery
-async function handleSingleStatusUpdate(
-  supabase: any,
-  deliveryId: string,
-  newStatus: string,
-  sheetsUrl: string | null
-) {
-  console.log(`Updating single delivery ${deliveryId} to status ${newStatus}`);
-  
-  // Get the delivery details
-  const { data: delivery, error: fetchError } = await supabase
-    .from('deliveries')
-    .select('*')
-    .eq('id', deliveryId)
-    .maybeSingle();
-    
-  if (fetchError || !delivery) {
-    console.error('Error fetching delivery:', fetchError);
-    return {
-      status: 404,
-      body: { error: 'Delivery not found' }
-    };
-  }
-  
-  const now = new Date().toISOString();
-  const { error: updateError } = await supabase
-    .from('deliveries')
-    .update({ status: newStatus, status_date: now })
-    .eq('id', deliveryId);
-    
-  if (updateError) {
-    console.error('Error updating delivery:', updateError);
-    return {
-      status: 500,
-      body: { error: 'Failed to update delivery' }
-    };
-  }
-  
-  const { error: historyError } = await supabase
-    .from('delivery_history')
-    .insert({
-      delivery_id: deliveryId,
-      status: newStatus,
-      timestamp: now
-    });
-  
-  if (historyError) {
-    console.error('Error creating history entry:', historyError);
-  }
-  
-  // Update Google Sheets if a URL is provided
-  if (sheetsUrl && delivery.tracking_number) {
-    try {
-      await updateGoogleSheets(sheetsUrl, delivery.tracking_number, newStatus);
-    } catch (sheetError) {
-      console.error("Error updating Google Sheets:", sheetError);
-    }
-  }
-  
-  return {
-    status: 200,
-    body: { success: true, message: 'Delivery updated' }
-  };
 }
 
 // Function to handle batch status updates for multiple deliveries

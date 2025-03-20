@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { corsHeaders } from "./utils/corsHeaders.ts";
-import { handleSingleStatusUpdate, handleBatchStatusUpdate } from "./handlers/updateStatusHandler.ts";
+import { handleSingleStatusUpdate } from "./handlers/updateStatusHandler.ts";
 import { handleStatusOptionsRequest } from "./handlers/statusOptionsHandler.ts";
 import { handleSyncRequest } from "./handlers/syncHandler.ts";
 
@@ -33,13 +33,8 @@ serve(async (req) => {
       }
 
       let result;
-      // Check if we need to batch update for this customer
-      if (updateType === "batch") {
-        result = await handleBatchStatusUpdate(supabase, deliveryId, newStatus, sheetsUrl);
-      } else {
-        // Single delivery update
-        result = await handleSingleStatusUpdate(supabase, deliveryId, newStatus, sheetsUrl);
-      }
+      // Handle single and batch updates through the same handler
+      result = await handleSingleStatusUpdate(supabase, deliveryId, newStatus, updateType, sheetsUrl);
       
       return new Response(
         JSON.stringify(result.body),
