@@ -65,41 +65,89 @@ export async function processDeliveryRow(
     // Get customer name
     let customerName = getValueByField(values, 'name', columnMap);
     
-    // If no customer name is found, check if there are other columns that might contain it
-    if (!customerName || customerName === finalTrackingNumber) {
+    // If no customer name is found, or if the customer name is the same as the tracking number,
+    // check if there are other columns that might contain it
+    if (!customerName || customerName === finalTrackingNumber || customerName.startsWith('GWD') || customerName.startsWith('AUTO-')) {
       // Look for likely customer name columns that weren't identified
       for (let j = 0; j < values.length; j++) {
         // Skip if this column is already mapped to something else
         if (Object.values(columnMap).includes(j)) continue;
         
         const value = values[j];
-        // Check if value looks like a customer name (text, not all numbers, not too short)
-        if (value && !/^\d+$/.test(value) && value.length > 3 && value !== finalTrackingNumber) {
+        // Check if value looks like a customer name (text, not all numbers, not too short, not a tracking number)
+        if (value && 
+            !/^\d+$/.test(value) && 
+            value.length > 2 && 
+            value !== finalTrackingNumber &&
+            !value.startsWith('GWD') &&
+            !value.startsWith('AUTO-')) {
           customerName = value;
           break;
         }
       }
     }
     
-    // If still no customer name, use tracking number as fallback
-    if (!customerName || customerName.trim() === '') {
-      customerName = finalTrackingNumber;
+    // If still no customer name, or customer name is the same as tracking number,
+    // use a generic name to avoid using tracking number as customer name
+    if (!customerName || 
+        customerName.trim() === '' || 
+        customerName === finalTrackingNumber || 
+        customerName.startsWith('GWD') || 
+        customerName.startsWith('AUTO-')) {
+      customerName = `לקוח משלוח ${index + 1}`;
     }
     
     // Get other fields from the row
     const scanDate = getValueByField(values, 'scanDate', columnMap) || new Date().toISOString();
     const statusDate = getValueByField(values, 'statusDate', columnMap) || new Date().toISOString(); 
     const status = normalizeStatus(getValueByField(values, 'status', columnMap) || 'pending');
-    const phone = formatPhoneNumber(getValueByField(values, 'phone', columnMap) || '');
-    const address = getValueByField(values, 'address', columnMap) || 'כתובת לא זמינה';
+    let phone = formatPhoneNumber(getValueByField(values, 'phone', columnMap) || '');
+    let address = getValueByField(values, 'address', columnMap) || '';
     const city = getValueByField(values, 'city', columnMap) || '';
     const assignedTo = getValueByField(values, 'assignedTo', columnMap) || 'לא שויך';
     
     // Get external ID if available (might be used for syncing with external systems)
     const externalId = getValueByField(values, 'externalId', columnMap) || finalTrackingNumber;
+    
+    // If address is empty but we have other columns that might contain address data
+    if (!address || address === 'כתובת לא זמינה') {
+      // Try to find another column with text that might be an address
+      for (let j = 0; j < values.length; j++) {
+        // Skip if this column is already mapped to something else
+        if (Object.values(columnMap).includes(j)) continue;
+        
+        const value = values[j];
+        // Check if value looks like an address (contains numbers and text, is reasonably long)
+        if (value && value.length > 8 && /\d/.test(value) && /[א-ת]/.test(value)) {
+          address = value;
+          break;
+        }
+      }
+    }
+    
+    // If phone is still empty, look for any column that might contain a phone number
+    if (!phone) {
+      for (let j = 0; j < values.length; j++) {
+        // Skip if this column is already mapped to something else
+        if (Object.values(columnMap).includes(j)) continue;
+        
+        const value = values[j];
+        // Check if value looks like a phone number
+        if (value && /^\+?\d{7,15}$/.test(value.replace(/[\s-()]/g, ''))) {
+          phone = formatPhoneNumber(value);
+          break;
+        }
+      }
+    }
 
     // Combine address and city if both exist
-    const fullAddress = city && address ? `${address}, ${city}` : address;
+    const fullAddress = city && address 
+      ? `${address}, ${city}` 
+      : address 
+        ? address 
+        : city 
+          ? city 
+          : 'כתובת לא זמינה';
 
     // Generate a UUID for the delivery ID
     const id = uuidv4();

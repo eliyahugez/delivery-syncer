@@ -16,6 +16,7 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
   const [urlInput, setUrlInput] = useState(user?.sheetsUrl || "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   
   useEffect(() => {
     if (user?.sheetsUrl) {
@@ -24,22 +25,45 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
   }, [user?.sheetsUrl]);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setUrlInput(e.target.value);
+    const value = e.target.value;
+    setUrlInput(value);
     setError(null);
+    setFeedbackMessage(null);
+    
+    // Provide instant feedback on URL format
+    if (value && !value.includes('docs.google.com/spreadsheets')) {
+      setFeedbackMessage("הקישור צריך להיות לגיליון Google Sheets");
+    } else if (value && isValidSheetUrl(value)) {
+      const cleanedUrl = cleanSheetUrl(value);
+      setFeedbackMessage(`מזהה גיליון תקין: ${cleanedUrl}`);
+    }
   };
   
   const handleSaveClick = async () => {
     setIsSaving(true);
+    setError(null);
     
     try {
+      if (!urlInput.trim()) {
+        setError("נא להזין קישור לטבלה");
+        setIsSaving(false);
+        return;
+      }
+      
       if (!isValidSheetUrl(urlInput)) {
-        setError("הקישור אינו תקין, אנא הזן קישור תקין");
+        setError("הקישור אינו תקין. נדרש קישור לגיליון Google Sheets");
         setIsSaving(false);
         return;
       }
       
       // Clean the URL to just the ID
       const cleanedUrl = cleanSheetUrl(urlInput);
+      
+      if (!cleanedUrl) {
+        setError("לא ניתן לחלץ מזהה תקין מהקישור");
+        setIsSaving(false);
+        return;
+      }
       
       if (!user) {
         toast({
@@ -76,14 +100,22 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
   return (
     <div className="flex flex-col space-y-4">
       <h2 className="text-lg font-semibold">קישור לטבלת Google Sheets</h2>
-      <Input 
-        type="url"
-        placeholder="הדבק קישור לטבלה"
-        value={urlInput}
-        onChange={handleInputChange}
-        className="w-full"
-      />
-      {error && <p className="text-red-500">{error}</p>}
+      <div className="space-y-2">
+        <Input 
+          type="url"
+          placeholder="הדבק קישור לטבלה"
+          value={urlInput}
+          onChange={handleInputChange}
+          className={`w-full ${error ? 'border-red-500' : feedbackMessage && !error ? 'border-green-500' : ''}`}
+        />
+        {feedbackMessage && !error && (
+          <p className="text-green-600 text-sm">{feedbackMessage}</p>
+        )}
+        {error && <p className="text-red-500 text-sm">{error}</p>}
+        <div className="text-xs text-gray-500 mt-1">
+          הקישור צריך להיות בפורמט: https://docs.google.com/spreadsheets/d/SHEET_ID/edit
+        </div>
+      </div>
       <Button onClick={handleSaveClick} disabled={isSaving}>
         {isSaving ? "שומר..." : "שמור קישור"}
       </Button>

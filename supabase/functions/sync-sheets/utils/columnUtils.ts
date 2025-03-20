@@ -20,17 +20,38 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
     statusDate: -1,
     scanDate: -1,
     assignedTo: -1,
+    externalId: -1,
   };
 
-  // Look for column headers that match our expected fields
+  // First look for exact matches in Hebrew
   columns.forEach((col, index) => {
     // Skip empty columns
     if (!col) return;
     
-    const lowerCol = String(col).toLowerCase();
-    console.log(`Analyzing column: ${col} (${lowerCol}) at index ${index}`);
+    const lowerCol = String(col).toLowerCase().trim();
+    
+    if (lowerCol === "מספר מעקב" || lowerCol === "מספר משלוח") columnMap.trackingNumber = index;
+    if (lowerCol === "שם" || lowerCol === "שם הלקוח" || lowerCol === "לקוח") columnMap.name = index;
+    if (lowerCol === "טלפון" || lowerCol === "מספר טלפון" || lowerCol === "נייד") columnMap.phone = index;
+    if (lowerCol === "כתובת" || lowerCol === "כתובת מלאה") columnMap.address = index;
+    if (lowerCol === "עיר") columnMap.city = index;
+    if (lowerCol === "סטטוס" || lowerCol === "מצב") columnMap.status = index;
+    if (lowerCol === "תאריך עדכון" || lowerCol === "תאריך סטטוס") columnMap.statusDate = index;
+    if (lowerCol === "תאריך סריקה" || lowerCol === "תאריך יצירה") columnMap.scanDate = index;
+    if (lowerCol === "שליח" || lowerCol === "נהג" || lowerCol === "מחלק") columnMap.assignedTo = index;
+    if (lowerCol === "מזהה חיצוני" || lowerCol === "מזהה" || lowerCol === "מס' הזמנה") columnMap.externalId = index;
+  });
 
-    // Tracking Number
+  // Now try more flexible matching if we couldn't find exact matches
+  columns.forEach((col, index) => {
+    if (!col) return;
+    
+    const lowerCol = String(col).toLowerCase();
+    
+    // Skip already mapped columns
+    if (Object.values(columnMap).includes(index)) return;
+
+    // Tracking Number (Checking for more variations)
     if (
       lowerCol.includes("מספר מעקב") ||
       lowerCol.includes("tracking") ||
@@ -40,10 +61,12 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
       lowerCol.includes("order id") ||
       lowerCol.includes("track") ||
       lowerCol.includes("מעקב") ||
-      lowerCol === "number"
+      lowerCol === "number" ||
+      lowerCol.includes("מס'") ||
+      lowerCol.includes("barcode") ||
+      lowerCol.includes("ברקוד")
     ) {
-      columnMap.trackingNumber = index;
-      console.log(`Found tracking number column at index ${index}: ${col}`);
+      if (columnMap.trackingNumber === -1) columnMap.trackingNumber = index;
     } 
     // Customer Name
     else if (
@@ -54,10 +77,11 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
       lowerCol === "שם לקוח" ||
       lowerCol === "לקוח" ||
       lowerCol === "client" ||
-      lowerCol === "name"
+      lowerCol === "name" ||
+      lowerCol.includes("מקבל") ||
+      lowerCol.includes("recipient")
     ) {
-      columnMap.name = index;
-      console.log(`Found customer name column at index ${index}: ${col}`);
+      if (columnMap.name === -1) columnMap.name = index;
     } 
     // Phone Number
     else if (
@@ -71,8 +95,7 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
       lowerCol === "tel" ||
       lowerCol === "phone"
     ) {
-      columnMap.phone = index;
-      console.log(`Found phone column at index ${index}: ${col}`);
+      if (columnMap.phone === -1) columnMap.phone = index;
     } 
     // Address
     else if (
@@ -81,40 +104,40 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
       lowerCol.includes("location") ||
       lowerCol.includes("delivery address") ||
       lowerCol.includes("street") ||
-      lowerCol === "address"
+      lowerCol === "address" ||
+      lowerCol.includes("רחוב")
     ) {
-      columnMap.address = index;
-      console.log(`Found address column at index ${index}: ${col}`);
+      if (columnMap.address === -1) columnMap.address = index;
     }
     // City
     else if (
       lowerCol.includes("עיר") ||
       lowerCol.includes("city") ||
       lowerCol.includes("town") ||
-      lowerCol === "city"
+      lowerCol === "city" ||
+      lowerCol.includes("יישוב")
     ) {
-      columnMap.city = index;
-      console.log(`Found city column at index ${index}: ${col}`);
+      if (columnMap.city === -1) columnMap.city = index;
     }
     // Status
     else if (
       lowerCol.includes("סטטוס") ||
       lowerCol.includes("status") ||
       lowerCol.includes("מצב") ||
-      lowerCol === "status"
+      lowerCol === "status" ||
+      lowerCol.includes("state")
     ) {
-      columnMap.status = index;
-      console.log(`Found status column at index ${index}: ${col}`);
+      if (columnMap.status === -1) columnMap.status = index;
     } 
     // Status Date
     else if (
       lowerCol.includes("תאריך סטטוס") ||
       lowerCol.includes("status date") ||
       lowerCol.includes("עדכון סטטוס") ||
-      lowerCol.includes("תאריך עדכון")
+      lowerCol.includes("תאריך עדכון") ||
+      lowerCol.includes("updated")
     ) {
-      columnMap.statusDate = index;
-      console.log(`Found status date column at index ${index}: ${col}`);
+      if (columnMap.statusDate === -1) columnMap.statusDate = index;
     } 
     // Scan Date / Created Date
     else if (
@@ -122,13 +145,11 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
       lowerCol.includes("scan date") ||
       lowerCol.includes("נוצר") ||
       lowerCol.includes("תאריך יצירה") ||
-      lowerCol.includes("date") ||
-      lowerCol.includes("תאריך") ||
+      lowerCol.includes("created") ||
       lowerCol === "date scanned" ||
       lowerCol === "date"
     ) {
-      columnMap.scanDate = index;
-      console.log(`Found scan date column at index ${index}: ${col}`);
+      if (columnMap.scanDate === -1) columnMap.scanDate = index;
     } 
     // Assigned To / Courier
     else if (
@@ -137,84 +158,71 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
       lowerCol.includes("assigned") ||
       lowerCol.includes("courier") ||
       lowerCol.includes("driver") ||
-      lowerCol.includes("delivery person")
+      lowerCol.includes("delivery person") ||
+      lowerCol.includes("נהג")
     ) {
-      columnMap.assignedTo = index;
-      console.log(`Found assigned to column at index ${index}: ${col}`);
+      if (columnMap.assignedTo === -1) columnMap.assignedTo = index;
     }
   });
 
-  // Log all available columns for debugging
-  console.log("All columns in sheet:", columns);
-
-  // If we couldn't find status date, use scan date as a fallback
-  if (columnMap.statusDate === -1 && columnMap.scanDate !== -1) {
-    columnMap.statusDate = columnMap.scanDate;
-  }
-
-  // If we couldn't find scan date, use status date as a fallback
-  if (columnMap.scanDate === -1 && columnMap.statusDate !== -1) {
-    columnMap.scanDate = columnMap.statusDate;
-  }
-  
-  // Make a second pass to find any columns we couldn't identify that might be useful
-  // This is helpful when column names don't exactly match our patterns
-  
-  // If we still couldn't find name and there's an unmapped column, look for likely customer name columns
+  // Make a third pass to check for any column that might contain customer data
+  // This is especially helpful for identifying the correct name column
   if (columnMap.name === -1) {
-    for (let i = 0; i < columns.length; i++) {
-      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
+    columns.forEach((col, index) => {
+      // Skip already mapped columns
+      if (Object.values(columnMap).includes(index)) return;
       
-      const colValue = String(columns[i] || '').toLowerCase();
-      // Look for columns that might contain customer names
-      if (colValue.includes('customer') || colValue.includes('client') || 
-          colValue.includes('לקוח') || colValue.includes('שם')) {
-        columnMap.name = i;
-        console.log(`Inferred customer name column at index ${i}: ${columns[i]}`);
-        break;
+      // Look for columns that might contain names but aren't tracking numbers
+      // In many delivery data formats, a column with person names is often 
+      // in the first few columns and doesn't match other patterns
+      if (index < 5 && col && col.length > 0) {
+        columnMap.name = index;
+        console.log(`Assigning name column by position: ${col} at index ${index}`);
+        return;
       }
-    }
+    });
   }
-  
-  // If we still couldn't find tracking number, try to find it in the first few columns
+
+  // If we still couldn't find an address column, but we have a city column,
+  // we can check if there's an unmapped column containing "street" or "רחוב"
+  if (columnMap.address === -1 && columnMap.city !== -1) {
+    columns.forEach((col, index) => {
+      // Skip already mapped columns
+      if (Object.values(columnMap).includes(index)) return;
+      
+      const lowerCol = String(col).toLowerCase();
+      if (lowerCol.includes("רחוב") || lowerCol.includes("street") || lowerCol.includes("כתובת")) {
+        columnMap.address = index;
+        console.log(`Found street address column: ${col} at index ${index}`);
+        return;
+      }
+    });
+  }
+
+  // If we still don't have date fields, use any column with "date" or "תאריך"
+  if (columnMap.scanDate === -1 && columnMap.statusDate === -1) {
+    columns.forEach((col, index) => {
+      // Skip already mapped columns
+      if (Object.values(columnMap).includes(index)) return;
+      
+      const lowerCol = String(col).toLowerCase();
+      if (lowerCol.includes("date") || lowerCol.includes("תאריך")) {
+        columnMap.scanDate = index;
+        columnMap.statusDate = index; // Use the same column for both dates as fallback
+        console.log(`Assigned date column by keyword match: ${col} at index ${index}`);
+        return;
+      }
+    });
+  }
+
+  // Last resort for tracking number: use the first column if nothing better found
   if (columnMap.trackingNumber === -1) {
-    for (let i = 0; i < Math.min(3, columns.length); i++) {
-      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
-      columnMap.trackingNumber = i;
-      console.log(`Inferred tracking number column at index ${i}: ${columns[i]}`);
-      break;
-    }
+    columnMap.trackingNumber = 0;
+    console.log(`Using first column as tracking number fallback: ${columns[0]}`);
   }
 
-  // If we still couldn't find phone and there's an unmapped column with "phone" or similar in name
-  if (columnMap.phone === -1) {
-    for (let i = 0; i < columns.length; i++) {
-      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
-      // Look for numeric patterns typical of phone numbers
-      const colValue = String(columns[i] || '').toLowerCase();
-      if (colValue.includes('phone') || colValue.includes('mobile') || 
-          colValue.includes('טלפון') || colValue.includes('נייד')) {
-        columnMap.phone = i;
-        console.log(`Inferred phone column at index ${i}: ${columns[i]}`);
-        break;
-      }
-    }
-  }
-
-  // If we still couldn't find address
-  if (columnMap.address === -1) {
-    for (let i = 0; i < columns.length; i++) {
-      if (Object.values(columnMap).includes(i)) continue; // Skip already mapped columns
-      const colValue = String(columns[i] || '').toLowerCase();
-      if (colValue.includes('address') || colValue.includes('location') || 
-          colValue.includes('כתובת') || colValue.includes('מיקום')) {
-        columnMap.address = i;
-        console.log(`Inferred address column at index ${i}: ${columns[i]}`);
-        break;
-      }
-    }
-  }
-
+  // Log the final mapping for debugging
   console.log("Final column mapping:", columnMap);
+  
   return columnMap;
 }
