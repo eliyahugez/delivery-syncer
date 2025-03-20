@@ -19,10 +19,17 @@ export function useDeliveryGroups(deliveries: Delivery[]) {
     const groups: Record<string, DeliveryGroup> = {};
     
     deliveries.forEach(delivery => {
-      // Properly extract customer name, with fallback to tracking number
-      const customerName = delivery.name && delivery.name !== delivery.trackingNumber 
-        ? delivery.name 
-        : delivery.trackingNumber || 'Unknown';
+      // Clean customer name to prevent empty or tracking number groups
+      let customerName = delivery.name || '';
+      
+      // If the name is empty, just the tracking number, or looks like an auto-tracking,
+      // use a consistent placeholder with the tracking number
+      if (!customerName || 
+          customerName === delivery.trackingNumber ||
+          customerName.trim() === '' ||
+          /^AUTO-\d+$/.test(delivery.trackingNumber || '')) {
+        customerName = `לקוח ${delivery.trackingNumber || 'לא ידוע'}`;
+      }
       
       if (!groups[customerName]) {
         groups[customerName] = {
@@ -63,6 +70,9 @@ export function useDeliveryGroups(deliveries: Delivery[]) {
         groups[customerName].phones.push(delivery.phone);
       }
     });
+    
+    // For debugging
+    console.log(`Created ${Object.keys(groups).length} delivery groups from ${deliveries.length} deliveries`);
     
     return Object.values(groups).sort((a, b) => 
       a.customerName.localeCompare(b.customerName, 'he'));

@@ -54,16 +54,35 @@ export function useDeliveries() {
     if (!user?.sheetsUrl) return;
     
     setIsLoading(true);
-    setError(null);
     
     try {
+      console.log("Fetching deliveries...");
+      
+      // Try to fetch from Supabase edge function
       const { deliveries: fetchedDeliveries, statusOptions, lastSyncTime } = 
-        await fetchDeliveries(user.sheetsUrl);
+        await fetchDeliveries(user.sheetsUrl)
+          .catch(err => {
+            console.error("Error fetching deliveries from edge function:", err);
+            
+            // Show toast for connection issues
+            toast({
+              title: "שגיאת התחברות",
+              description: "לא ניתן להתחבר לשרת. משתמש במידע מקומי.",
+              variant: "destructive",
+            });
+            
+            // Return null to continue to fallback
+            throw err;
+          });
       
       // Enhance phone numbers to international format if needed
       const enhancedDeliveries = fetchedDeliveries.map(delivery => ({
         ...delivery,
-        phone: formatPhoneNumber(delivery.phone)
+        phone: formatPhoneNumber(delivery.phone),
+        // Ensure customer name is not empty or just the tracking number
+        name: delivery.name && delivery.name !== delivery.trackingNumber 
+          ? delivery.name 
+          : "לקוח " + delivery.trackingNumber
       }));
       
       console.log("Loaded deliveries:", enhancedDeliveries.slice(0, 3));
@@ -76,19 +95,49 @@ export function useDeliveries() {
       })));
       
       setDeliveries(enhancedDeliveries);
+      setError(null);
       
       if (statusOptions && statusOptions.length > 0) {
         setDeliveryStatusOptions(statusOptions);
       }
       
       if (lastSyncTime) {
-        setLastSyncTime(lastSyncTime);
+        setLastSyncTime(new Date(lastSyncTime));
       }
     } catch (err) {
       console.error("Error loading deliveries:", err);
-      setError(err instanceof Error ? err.message : String(err));
+      
+      // For better DX, show debug info in console
+      if (err instanceof Error) {
+        console.debug("Error details:", err.message, err.stack);
+        
+        // Check if we have any cached deliveries we can use
+        const cachedDeliveriesStr = localStorage.getItem('cached_deliveries');
+        if (cachedDeliveriesStr) {
+          try {
+            const cachedDeliveries = JSON.parse(cachedDeliveriesStr);
+            console.log("Loaded cached deliveries:", cachedDeliveries.length);
+            setDeliveries(cachedDeliveries);
+            
+            // Set a different error message to indicate we're using cached data
+            setError("משתמש בנתונים מהמטמון. לא ניתן להתחבר לשרת.");
+          } catch (cacheErr) {
+            console.error("Error parsing cached deliveries:", cacheErr);
+            setError("שגיאה בטעינת נתונים. בדוק את החיבור לאינטרנט.");
+          }
+        } else {
+          setError("לא ניתן לטעון נתונים ואין נתונים מקומיים. בדוק את החיבור לאינטרנט.");
+        }
+      } else {
+        setError("שגיאה לא ידועה בטעינת נתונים.");
+      }
     } finally {
       setIsLoading(false);
+      
+      // Always cache the current deliveries for offline use
+      if (deliveries.length > 0) {
+        localStorage.setItem('cached_deliveries', JSON.stringify(deliveries));
+      }
     }
   };
 
@@ -163,6 +212,9 @@ export function useDeliveries() {
           title: "סטטוס עודכן",
           description: updateType === "batch" ? "כל המשלוחים של לקוח זה עודכנו" : "המשלוח עודכן בהצלחה",
         });
+        
+        // Update cached data
+        localStorage.setItem('cached_deliveries', JSON.stringify(updatedDeliveries));
       } catch (e) {
         console.error("Error updating status in Supabase:", e);
         
@@ -190,13 +242,38 @@ export function useDeliveries() {
         title: "שמירה במצב לא מקוון",
         description: "העדכון יסונכרן כאשר החיבור יחזור",
       });
+      
+      // Update cached data even when offline
+      localStorage.setItem('cached_deliveries', JSON.stringify(updatedDeliveries));
     }
   }, [deliveries, isOnline, user, toast, updateLocalDeliveries, addOfflineChange]);
 
   // Handle syncing pending updates
   const handleSyncPendingUpdates = useCallback(async () => {
+    if (!isOnline) {
+      toast({
+        title: "אין חיבור לאינטרנט",
+        description: "לא ניתן לסנכרן במצב לא מקוון",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (user?.sheetsUrl) {
-      await syncPendingUpdates(user.sheetsUrl);
+      try {
+        await syncPendingUpdates(user.sheetsUrl);
+        toast({
+          title: "סנכרון הושלם",
+          description: "כל העדכונים סונכרנו בהצלחה",
+        });
+      } catch (err) {
+        console.error("Error syncing updates:", err);
+        toast({
+          title: "שגיאה בסנכרון",
+          description: "לא ניתן לסנכרן חלק מהעדכונים, נסה שוב מאוחר יותר",
+          variant: "destructive",
+        });
+      }
     } else {
       toast({
         title: "שגיאה בסנכרון",
@@ -204,7 +281,7 @@ export function useDeliveries() {
         variant: "destructive",
       });
     }
-  }, [user, syncPendingUpdates, toast]);
+  }, [user, syncPendingUpdates, toast, isOnline]);
 
   return {
     deliveries,
