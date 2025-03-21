@@ -1,53 +1,26 @@
 
 import { useCallback } from 'react';
 import { Delivery } from "@/types/delivery";
-import { saveToStorage, STORAGE_KEYS } from '@/utils/localStorage';
+import { useSingleUpdate } from './updates/useSingleUpdate';
+import { useBatchUpdate } from './updates/useBatchUpdate';
 
 export function useLocalDeliveryUpdates() {
-  // Update delivery status in cache
+  const { updateSingleDelivery } = useSingleUpdate();
+  const { updateBatchDeliveries } = useBatchUpdate();
+
+  // Update deliveries locally
   const updateLocalDeliveries = useCallback((
     deliveries: Delivery[],
     deliveryId: string,
     newStatus: string,
-    updateType: 'single' | 'batch' = 'single'
+    updateType: 'single' | 'batch'
   ): Delivery[] => {
-    let updatedDeliveries: Delivery[];
-    
     if (updateType === 'batch') {
-      // Find the delivery to get the customer name
-      const targetDelivery = deliveries.find(d => d.id === deliveryId);
-      if (!targetDelivery || !targetDelivery.name) return deliveries;
-      
-      // Update all deliveries with the same customer name
-      updatedDeliveries = deliveries.map(delivery => {
-        if (delivery.name === targetDelivery.name) {
-          return {
-            ...delivery,
-            status: newStatus,
-            statusDate: new Date().toISOString()
-          };
-        }
-        return delivery;
-      });
+      return updateBatchDeliveries(deliveries, deliveryId, newStatus);
     } else {
-      // Just update the single delivery
-      updatedDeliveries = deliveries.map(delivery => {
-        if (delivery.id === deliveryId) {
-          return {
-            ...delivery,
-            status: newStatus,
-            statusDate: new Date().toISOString()
-          };
-        }
-        return delivery;
-      });
+      return updateSingleDelivery(deliveries, deliveryId, newStatus);
     }
-    
-    // Update the cache
-    saveToStorage(STORAGE_KEYS.DELIVERIES_CACHE, updatedDeliveries);
-    
-    return updatedDeliveries;
-  }, []);
+  }, [updateSingleDelivery, updateBatchDeliveries]);
 
   return { updateLocalDeliveries };
 }

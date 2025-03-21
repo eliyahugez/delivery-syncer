@@ -6,6 +6,7 @@ import { handleStatusOptionsRequest } from "./handlers/statusOptionsHandler.ts";
 import { handleSyncRequest } from "./handlers/syncHandler.ts";
 import { supabase } from "./supabase.ts";
 import { verifyDatabaseSchema } from "./utils/dbDebug.ts";
+import { formatError, safeApiCall } from "./utils/errorHandler.ts";
 
 serve(async (req) => {
   // Handle CORS
@@ -52,7 +53,7 @@ serve(async (req) => {
     if (action === "setColumnMappings" && columnMappings) {
       console.log("Saving custom column mappings:", columnMappings);
       
-      try {
+      const mappingResult = await safeApiCall(async () => {
         const mappingId = sheetsUrl || 'default_mapping';
         
         const { error } = await supabase
@@ -65,31 +66,25 @@ serve(async (req) => {
             { onConflict: 'sheet_url' }
           );
           
-        if (error) {
-          console.error("Error saving column mappings:", error);
-          return new Response(
-            JSON.stringify({ 
-              error: 'שגיאה בשמירת מיפוי העמודות',
-              details: error.message
-            }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
+        if (error) throw new Error(error.message);
         
-        return new Response(
-          JSON.stringify({ success: true, message: 'מיפוי העמודות נשמר בהצלחה' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } catch (error) {
-        console.error("Error processing column mappings:", error);
+        return { success: true, message: 'מיפוי העמודות נשמר בהצלחה' };
+      });
+      
+      if (mappingResult.error) {
         return new Response(
           JSON.stringify({ 
-            error: 'שגיאה בעיבוד מיפוי העמודות',
-            details: error instanceof Error ? error.message : 'Unknown error'
+            error: 'שגיאה בשמירת מיפוי העמודות',
+            details: mappingResult.error.message
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      
+      return new Response(
+        JSON.stringify(mappingResult.data),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
     
     // For status update action
@@ -101,9 +96,7 @@ serve(async (req) => {
         );
       }
 
-      let result;
-      // Handle single and batch updates through the same handler
-      result = await handleSingleStatusUpdate(supabase, deliveryId, newStatus, updateType, sheetsUrl);
+      const result = await handleSingleStatusUpdate(supabase, deliveryId, newStatus, updateType, sheetsUrl);
       
       return new Response(
         JSON.stringify(result.body),
@@ -141,11 +134,10 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('Error processing request:', error);
     
+    const formattedError = formatError(error);
+    
     return new Response(
-      JSON.stringify({ 
-        error: error.message || 'Internal server error',
-        stack: error.stack ? error.stack.split("\n").slice(0, 3).join("\n") : null
-      }),
+      JSON.stringify(formattedError),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

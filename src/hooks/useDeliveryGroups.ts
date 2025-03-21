@@ -1,6 +1,7 @@
 
 import { useMemo } from 'react';
 import { Delivery } from '@/types/delivery';
+import { useAddressGrouping } from './grouping/useAddressGrouping';
 
 export interface DeliveryGroup {
   customerName: string;
@@ -14,6 +15,8 @@ export interface DeliveryGroup {
 }
 
 export function useDeliveryGroups(deliveries: Delivery[]) {
+  const { shouldUseAddressGrouping, getAddressGroupKey } = useAddressGrouping();
+  
   // Group deliveries by customer name
   const deliveryGroups = useMemo(() => {
     const groups: Record<string, DeliveryGroup> = {};
@@ -25,48 +28,28 @@ export function useDeliveryGroups(deliveries: Delivery[]) {
         return;
       }
       
-      // IMPROVED: Use a better grouping algorithm
-      // 1. If name contains actual person name, group by name
-      // 2. If name is a date, group by address
-      // 3. If name is AUTO-, group by address if possible
-      
       let customerName = delivery.name?.trim() || '';
       let groupKey = '';
-      let shouldUseAddressGrouping = false;
-      
-      // Check if the name is in date format or marked as a date
-      const isDatePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(customerName) || 
-                            customerName.startsWith('[DATE]') ||
-                            customerName.startsWith('תאריך:');
-                            
-      // Check if tracking number is AUTO-XX format
-      const isAutoTracking = /^AUTO-\d+$/.test(delivery.trackingNumber);
-      
-      // Check if name is empty or just the tracking number
-      const isEmptyOrTrackingName = !customerName || 
-                                     customerName === delivery.trackingNumber ||
-                                     customerName === 'לא ידוע';
       
       // Determine if we should group by address
-      if (isDatePattern || isAutoTracking || isEmptyOrTrackingName) {
-        shouldUseAddressGrouping = true;
-      }
-      
-      // If we should use address grouping and there is an address, use that
-      if (shouldUseAddressGrouping && delivery.address) {
-        // Extract main location from address for better grouping
-        const addressParts = delivery.address.split(/[-,]/);
-        const mainLocation = addressParts[0]?.trim();
-        
-        if (mainLocation && mainLocation.length > 2) {
-          // Use location as the grouping key
-          groupKey = mainLocation;
-          customerName = mainLocation;
-          console.log(`Using address "${mainLocation}" as grouping key`);
+      if (shouldUseAddressGrouping(delivery)) {
+        // If we should use address grouping and there is an address, use that
+        if (delivery.address) {
+          const mainLocation = getAddressGroupKey(delivery.address);
+          
+          if (mainLocation) {
+            // Use location as the grouping key
+            groupKey = mainLocation;
+            customerName = mainLocation;
+            console.log(`Using address "${mainLocation}" as grouping key`);
+          } else {
+            // Fallback to full address if we can't extract a good main location
+            groupKey = delivery.address;
+            customerName = delivery.address;
+          }
         } else {
-          // Fallback to full address if we can't extract a good main location
-          groupKey = delivery.address;
-          customerName = delivery.address;
+          // Use the customer name as the grouping key
+          groupKey = customerName;
         }
       } else {
         // Use the customer name as the grouping key
@@ -129,7 +112,7 @@ export function useDeliveryGroups(deliveries: Delivery[]) {
     
     return Object.values(groups).sort((a, b) => 
       a.customerName.localeCompare(b.customerName, 'he'));
-  }, [deliveries]);
+  }, [deliveries, shouldUseAddressGrouping, getAddressGroupKey]);
   
   // Get a specific group by customer name
   const getGroupByCustomerName = (name: string) => {

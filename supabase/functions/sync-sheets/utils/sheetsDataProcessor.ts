@@ -1,9 +1,9 @@
 
 import { extractSheetId } from "./sheetUtils.ts";
-import { analyzeColumns } from "./columnUtils.ts";
 import { processDeliveryRow, saveDeliveryToDatabase } from "./deliveryProcessor.ts";
-import { fetchStatusOptionsFromSheets } from "../handlers/statusOptionsHandler.ts";
 import { getTableColumns } from "./dbDebug.ts";
+import { getColumnMappings, saveColumnMappings } from "./sheetProcessing/columnMapping.ts";
+import { getStatusOptions } from "./sheetProcessing/statusOptionsProcessor.ts";
 
 interface ProcessOptions {
   forceRefresh?: boolean;
@@ -17,7 +17,6 @@ export async function processAndSaveData(sheetsData: any, supabase: any, options
   
   // Verify database schema before starting
   const deliveriesColumns = await getTableColumns(supabase, 'deliveries');
-  console.log("Deliveries columns:", deliveriesColumns);
   
   if (!deliveriesColumns || deliveriesColumns.length === 0) {
     throw new Error('Cannot access database schema or table structure is invalid. Check Supabase permissions and configuration.');
@@ -29,44 +28,14 @@ export async function processAndSaveData(sheetsData: any, supabase: any, options
     throw new Error('Invalid Google Sheets data structure');
   }
 
-  const columns = sheetsData.table.cols.map((col: any) => col.label || "");
-  console.log('Detected columns:', columns);
-
-  // Map columns to our expected fields - use custom mappings if provided, otherwise auto-detect
-  let columnMap: Record<string, number>;
-  
-  if (options.customColumnMappings && Object.keys(options.customColumnMappings).length > 0) {
-    columnMap = options.customColumnMappings;
-    console.log('Using custom column mapping:', columnMap);
-  } else {
-    // Try to load saved mappings for this sheet
-    const spreadsheetId = extractSheetId(JSON.stringify(sheetsData)) || '';
-    let savedMappings = null;
-    
-    try {
-      const { data, error } = await supabase
-        .from('column_mappings')
-        .select('mappings')
-        .eq('sheet_url', spreadsheetId)
-        .maybeSingle();
-        
-      if (data && data.mappings) {
-        savedMappings = data.mappings;
-        console.log('Found saved column mappings:', savedMappings);
-      }
-    } catch (error) {
-      console.warn("Error loading saved mappings:", error);
-    }
-    
-    // Use saved mappings if available, otherwise auto-detect
-    if (savedMappings && Object.keys(savedMappings).length > 0) {
-      columnMap = savedMappings;
-      console.log('Using saved column mapping:', columnMap);
-    } else {
-      columnMap = analyzeColumns(columns);
-      console.log('Auto-detected column mapping:', columnMap);
-    }
-  }
+  // Extract spreadsheet ID and get column mappings
+  const spreadsheetId = extractSheetId(JSON.stringify(sheetsData)) || '';
+  const columnMap = await getColumnMappings(
+    sheetsData, 
+    supabase, 
+    spreadsheetId, 
+    options.customColumnMappings
+  );
 
   const rows = sheetsData.table.rows;
   const deliveries: any[] = [];
@@ -124,8 +93,6 @@ export async function processAndSaveData(sheetsData: any, supabase: any, options
           reason: saveResult.error,
           data: result.dbRecord
         });
-      } else {
-        console.log(`Successfully processed delivery ${saveResult.id}`);
       }
     } catch (error) {
       console.error(`Error processing row ${i}:`, error);
@@ -154,43 +121,10 @@ export async function processAndSaveData(sheetsData: any, supabase: any, options
   }
 
   // Save column mappings
-  try {
-    const mappingId = extractSheetId(JSON.stringify(sheetsData)) || 'last_mapping';
-    
-    const { error: mappingError } = await supabase
-      .from('column_mappings')
-      .upsert(
-        {
-          sheet_url: mappingId,
-          mappings: columnMap
-        },
-        { onConflict: 'sheet_url' }
-      );
-      
-    if (mappingError) {
-      console.error("Error saving column mappings:", mappingError);
-    }
-  } catch (error) {
-    console.error("Error saving column mappings:", error);
-  }
+  await saveColumnMappings(supabase, spreadsheetId || 'last_mapping', columnMap);
     
   // Get unique status options
-  let statusOptions = [];
-  try {
-    const spreadsheetId = extractSheetId(JSON.stringify(sheetsData));
-    const statusOptionsResult = await fetchStatusOptionsFromSheets(`https://docs.google.com/spreadsheets/d/${spreadsheetId}`);
-    statusOptions = statusOptionsResult || [];
-  } catch (error) {
-    console.error("Error fetching status options:", error);
-    // Use default status options
-    statusOptions = [
-      { value: "pending", label: "ממתין" },
-      { value: "in_progress", label: "בדרך" },
-      { value: "delivered", label: "נמסר" },
-      { value: "failed", label: "נכשל" },
-      { value: "returned", label: "הוחזר" }
-    ];
-  }
+  const statusOptions = await getStatusOptions(spreadsheetId);
 
   return {
     deliveries,

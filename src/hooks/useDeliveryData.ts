@@ -1,11 +1,11 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Delivery } from "@/types/delivery";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useFetchDeliveries } from './useFetchDeliveries';
 import { useOfflineMode } from './useOfflineMode';
-import { saveToStorage, getFromStorage, STORAGE_KEYS } from '@/utils/localStorage';
+import { useDeliveryProcessor } from './data/useDeliveryProcessor';
 
 export function useDeliveryData() {
   const { toast } = useToast();
@@ -24,36 +24,7 @@ export function useDeliveryData() {
 
   const { isOnline } = useOfflineMode();
   const { fetchDeliveries } = useFetchDeliveries(isOnline);
-
-  // Format phone number to international format
-  const formatPhoneNumber = (phone: string): string => {
-    if (!phone) return '';
-    
-    // Skip if the phone field contains status information
-    if (phone.toLowerCase().includes('delivered') || 
-        phone.toLowerCase().includes('נמסר') ||
-        phone.toLowerCase().includes('status')) {
-      return '';
-    }
-    
-    // Remove non-digit characters
-    let digits = phone.replace(/\D/g, "");
-    
-    // Format to international format (+972)
-    if (digits.startsWith("972")) {
-      return `+${digits}`;
-    } else if (digits.startsWith("0")) {
-      return `+972${digits.substring(1)}`;
-    }
-    
-    // If it's not starting with 0 or 972, and it has 9-10 digits, assume it's a local number
-    if (digits.length >= 9 && digits.length <= 10) {
-      return `+972${digits}`;
-    }
-    
-    // Otherwise, return as is
-    return phone;
-  };
+  const { processDeliveries } = useDeliveryProcessor();
 
   // Load deliveries
   const loadDeliveries = async (forceRefresh = false) => {
@@ -87,51 +58,7 @@ export function useDeliveryData() {
           });
       
       // Process received deliveries
-      const processedDeliveries = fetchedDeliveries.map(delivery => {
-        // Process the name field - handle date values specifically
-        let processedName = delivery.name || '';
-        
-        // Detect date in name field
-        if (typeof processedName === 'string') {
-          // If name is marked as date
-          if (processedName.startsWith('[DATE]')) {
-            processedName = processedName.replace('[DATE]', '').trim();
-          }
-          // Check if name is in Date() format and convert it
-          else if (processedName.startsWith('Date(') && processedName.endsWith(')')) {
-            try {
-              const dateString = processedName.substring(5, processedName.length - 1);
-              const [year, month, day] = dateString.split(',').map(Number);
-              processedName = `${day}/${month + 1}/${year}`;
-            } catch (e) {
-              console.error("Error parsing date in name:", processedName, e);
-            }
-          }
-        }
-        
-        // Check if phone field contains status info
-        let processedPhone = delivery.phone || '';
-        if (processedPhone.toLowerCase().includes('delivered') || 
-            processedPhone.toLowerCase().includes('נמסר') ||
-            processedPhone.toLowerCase().includes('status')) {
-          // Don't show status in phone field
-          processedPhone = '';
-        } else {
-          // Format the phone number normally
-          processedPhone = formatPhoneNumber(delivery.phone);
-        }
-        
-        // Ensure customer name is not empty or just the tracking number
-        const finalName = processedName && processedName !== delivery.trackingNumber 
-          ? processedName 
-          : `לקוח ${delivery.trackingNumber || 'לא ידוע'}`;
-          
-        return {
-          ...delivery,
-          name: finalName,
-          phone: processedPhone
-        };
-      });
+      const processedDeliveries = processDeliveries(fetchedDeliveries);
       
       console.log("Loaded deliveries:", processedDeliveries.slice(0, 3));
       
