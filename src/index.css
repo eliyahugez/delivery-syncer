@@ -159,6 +159,43 @@
   .page-transition-exit-active {
     @apply opacity-0 transition-opacity duration-300;
   }
+  
+  /* Mobile specific styles */
+  @media (max-width: 640px) {
+    .hide-on-mobile {
+      display: none;
+    }
+    
+    /* הגדלת אזורי לחיצה במובייל */
+    button, a {
+      @apply min-h-[44px] touch-manipulation;
+    }
+    
+    /* שיפור הקריאות של התוכן במובייל */
+    .table-container td, .table-container th {
+      @apply px-2 py-3;
+    }
+    
+    /* חלוקה בתצוגת מובייל - משלוחים ולקוחות */
+    .mobile-delivery-section {
+      @apply border rounded-lg p-3 mb-3 bg-white;
+    }
+    
+    /* כותרות במובייל */
+    .mobile-section-title {
+      @apply text-base font-bold mb-2;
+    }
+    
+    /* תפריט פעולות מהירות באזור תחתון במובייל */
+    .mobile-action-bar {
+      @apply fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-2 z-50;
+    }
+    
+    /* מרווח בתחתית עבור תפריט פעולות במובייל */
+    .mobile-pb-safe {
+      @apply pb-16;
+    }
+  }
 }
 
 @layer components {
@@ -168,5 +205,34 @@
 
   .button-glass {
     @apply glass px-6 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-200;
+  }
+  
+  /* כפתורי פעולה מהירים למסך המובייל */
+  .mobile-action-button {
+    @apply flex flex-col items-center justify-center p-2 rounded-full;
+  }
+  
+  .mobile-action-button-delivered {
+    @apply mobile-action-button bg-green-50 text-green-600;
+  }
+  
+  .mobile-action-button-pending {
+    @apply mobile-action-button bg-blue-50 text-blue-600;
+  }
+  
+  .mobile-action-button-failed {
+    @apply mobile-action-button bg-red-50 text-red-600;
+  }
+  
+  .mobile-action-button-call {
+    @apply mobile-action-button bg-blue-50 text-blue-600;
+  }
+  
+  .mobile-action-button-whatsapp {
+    @apply mobile-action-button bg-green-50 text-green-600;
+  }
+  
+  .mobile-action-button-navigate {
+    @apply mobile-action-button bg-blue-50 text-blue-600;
   }
 }

@@ -1,25 +1,62 @@
 
+import { useIsMobile } from '@/hooks/use-mobile';
+
 export function openNavigation(address: string) {
-  // Open in navigation app
+  if (!address) return;
+  
+  // עיבוד הכתובת לפורמט מתאים
   const encodedAddress = encodeURIComponent(address);
   
-  // Check if on mobile device
+  // בדיקה אם המשתמש במובייל
   if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-    // On mobile, try to use Waze
-    window.open(`https://waze.com/ul?q=${encodedAddress}`, '_blank');
+    // במובייל, ננסה להשתמש בוויז (מועדף לשליחים)
+    // אם וויז לא מותקן, יפתח את גוגל מפות
+    try {
+      window.location.href = `waze://?q=${encodedAddress}&navigate=yes`;
+      
+      // כגיבוי, אם וויז לא נפתח תוך 2 שניות, פתח בדפדפן
+      setTimeout(() => {
+        window.open(`https://waze.com/ul?q=${encodedAddress}&navigate=yes`, '_blank');
+      }, 2000);
+    } catch (e) {
+      // אם וויז נכשל, פתח בגוגל מפות
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
+    }
   } else {
-    // On desktop, open in Google Maps
+    // בדסקטופ, פתח בגוגל מפות
     window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
   }
 }
 
-export function openWhatsApp(phone: string, message: string = 'היי זה שליח') {
-  // Format the phone number (remove +, spaces, etc.)
+export function openWhatsApp(phone: string, message: string = 'היי זה שליח מחברת המשלוחים, אני בדרך אליך עם החבילה שלך.') {
+  if (!phone) return;
+  
+  // הסרת תווים שאינם ספרות מהטלפון
   const formattedPhone = phone.replace(/\D/g, '');
+  
+  // בדיקה אם המספר תקף
+  if (formattedPhone.length < 9) return;
+  
+  // הוספת קידומת בינלאומית אם חסרה
+  let internationalPhone = formattedPhone;
+  if (formattedPhone.startsWith('0')) {
+    internationalPhone = `972${formattedPhone.substring(1)}`;
+  } else if (!formattedPhone.startsWith('972')) {
+    internationalPhone = `972${formattedPhone}`;
+  }
+  
   const encodedMessage = encodeURIComponent(message);
-  window.open(`https://wa.me/${formattedPhone}?text=${encodedMessage}`, '_blank');
+  
+  // פתיחת וואטסאפ עם הודעה מותאמת אישית
+  window.open(`https://wa.me/${internationalPhone}?text=${encodedMessage}`, '_blank');
 }
 
 export function makePhoneCall(phone: string) {
-  window.open(`tel:${phone}`, '_blank');
+  if (!phone) return;
+  
+  // הסרת תווים שאינם ספרות
+  const formattedPhone = phone.replace(/\D/g, '');
+  
+  // פתיחת חייגן הטלפון
+  window.open(`tel:${formattedPhone}`, '_blank');
 }

@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Delivery } from '@/types/delivery';
 import DeliveryStatusBadge from '../DeliveryStatusBadge';
@@ -10,6 +10,9 @@ import PhoneNumberActions from './PhoneNumberActions';
 import AddressDisplay from './AddressDisplay';
 import StatusActions from './StatusActions';
 import ExpandedDeliveryRow from './ExpandedDeliveryRow';
+import { useIsMobile } from '@/hooks/use-mobile';
+import MobileActionButtons from '../mobile/MobileActionButtons';
+import { makePhoneCall, openWhatsApp } from '@/utils/navigation';
 
 interface DeliveryTableRowProps {
   customerName: string;
@@ -34,6 +37,8 @@ const DeliveryTableRow = ({
 }: DeliveryTableRowProps) => {
   const hasMultipleDeliveries = customerDeliveries.length > 1;
   const delivery = customerDeliveries[0]; // First delivery for this customer
+  const isMobile = useIsMobile();
+  const [showMobileActions, setShowMobileActions] = useState(false);
   
   // Get a clean display name (removing AUTO- prefix if present)
   const displayName = customerName.startsWith("לקוח AUTO-") 
@@ -47,16 +52,33 @@ const DeliveryTableRow = ({
                       !delivery.phone.toLowerCase().includes('status') 
                       ? delivery.phone : '';
 
+  // טיפול בלחיצה על השורה - אם במובייל, מציג את הפעולות המהירות
+  const handleRowClick = () => {
+    if (isMobile) {
+      setShowMobileActions(!showMobileActions);
+    } else {
+      toggleCustomer(customerName);
+    }
+  };
+
   return (
     <React.Fragment>
       <TableRow 
         className={`hover:bg-muted/20 cursor-pointer ${hasMultipleDeliveries ? 'font-semibold' : ''}`}
-        onClick={() => toggleCustomer(customerName)}
+        onClick={handleRowClick}
       >
         <TableCell className="p-2">
           <div className="flex space-x-1 rtl:space-x-reverse">
             {hasMultipleDeliveries && (
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleCustomer(customerName);
+                }}
+              >
                 {isCustomerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
             )}
@@ -69,10 +91,12 @@ const DeliveryTableRow = ({
               {displayName}
             </div>
             
-            {phoneNumber && <PhoneNumberActions 
-              phoneNumber={phoneNumber} 
-              handleWhatsApp={handleWhatsApp} 
-            />}
+            {phoneNumber && (
+              <PhoneNumberActions 
+                phoneNumber={phoneNumber} 
+                handleWhatsApp={handleWhatsApp} 
+              />
+            )}
             
             <AddressDisplay 
               address={delivery.address} 
@@ -115,9 +139,27 @@ const DeliveryTableRow = ({
           />
         ))
       }
+      
+      {/* מציג את פעולות המובייל אם נבחר */}
+      {showMobileActions && isMobile && (
+        <MobileActionButtons
+          phone={phoneNumber}
+          address={delivery.address}
+          deliveryId={delivery.id}
+          currentStatus={delivery.status}
+          onCall={makePhoneCall}
+          onWhatsApp={openWhatsApp}
+          onNavigate={handleNavigation}
+          onUpdateStatus={(id, status) => onUpdateStatus(
+            id, 
+            status,
+            hasMultipleDeliveries ? "batch" : "single"
+          )}
+          statusOptions={statusOptions}
+        />
+      )}
     </React.Fragment>
   );
 };
 
 export default DeliveryTableRow;
-
