@@ -6,6 +6,10 @@ import DeliveryStatusBadge from '../DeliveryStatusBadge';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { ChevronDown, ChevronUp, Phone, MessageSquare, Navigation, Package, MapPin, User } from 'lucide-react';
 import { DeliveryStatusOption } from '@/hooks/useDeliveries';
+import PhoneNumberActions from './PhoneNumberActions';
+import AddressDisplay from './AddressDisplay';
+import StatusActions from './StatusActions';
+import ExpandedDeliveryRow from './ExpandedDeliveryRow';
 
 interface DeliveryTableRowProps {
   customerName: string;
@@ -116,3 +120,4 @@ const DeliveryTableRow = ({
 };
 
 export default DeliveryTableRow;
+
