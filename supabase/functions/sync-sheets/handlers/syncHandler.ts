@@ -117,6 +117,9 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
     } else if (error.message?.includes("column") && error.message?.includes("does not exist")) {
       errorMessage = 'מבנה טבלה לא תקין';
       errorDetails = 'חסרות עמודות נדרשות בטבלה או במסד הנתונים. בדוק את מבנה הטבלה.';
+    } else if (error.message?.includes("uuid is not a function")) {
+      errorMessage = 'שגיאה בייצור מזהים';
+      errorDetails = 'בעיה בספריית UUID ביצירת מזהים. נא לפנות לתמיכה.';
     }
     
     // Enhanced error object to provide more details to the client

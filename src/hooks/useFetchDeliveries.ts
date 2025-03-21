@@ -61,21 +61,6 @@ export function useFetchDeliveries(isOnline: boolean) {
             throw new Error("לא ניתן לחלץ מזהה תקין מהקישור לטבלה");
           }
           
-          // First try to get just the status options to check if the sheet is accessible
-          const optionsResponse = await supabase.functions.invoke("sync-sheets", {
-            body: { 
-              action: "getStatusOptions",
-              sheetsUrl: cleanedUrl
-            }
-          });
-          
-          if (optionsResponse.error) {
-            console.error("Error fetching status options:", optionsResponse.error);
-            
-            const errorMessage = optionsResponse.error.message || 'שגיאה בגישה לטבלה';
-            throw new Error(`שגיאה בגישה לטבלת Google: ${errorMessage}`);
-          }
-          
           // Now fetch the full data with force refresh flag if needed
           console.log(`Fetching deliveries with forceRefresh=${forceRefresh}`);
           const response = await supabase.functions.invoke("sync-sheets", {
@@ -102,8 +87,47 @@ export function useFetchDeliveries(isOnline: boolean) {
             throw new Error(errorMessage);
           }
           
+          if (response.data?.error) {
+            console.error("Edge function returned error:", response.data.error);
+            
+            // Enhanced debugging for edge function errors
+            if (response.data.originalError) {
+              console.error("Original error:", response.data.originalError);
+              console.error("Error details:", response.data.details);
+              console.error("Error stack:", response.data.stack);
+            }
+            
+            throw new Error(response.data.error);
+          }
+          
           if (response.data?.deliveries) {
             fetchedDeliveries = response.data.deliveries;
+            
+            // If no deliveries were returned but we have failed rows, show detailed error
+            if (fetchedDeliveries.length === 0 && response.data.failedRows && response.data.failedRows.length > 0) {
+              console.error("Failed rows:", response.data.failedRows);
+              
+              // Log the first error for debugging
+              const firstError = response.data.failedRows[0];
+              console.error(`Row ${firstError.index} failed with error: ${firstError.reason}`);
+              
+              toast({
+                title: "שגיאה בעיבוד נתונים",
+                description: `בעיה בעיבוד השורות: ${firstError.reason}. סך הכל ${response.data.failedRows.length} שורות נכשלו.`,
+                variant: "destructive",
+              });
+              
+              // Show detailed error for common issues
+              if (firstError.reason && firstError.reason.includes("uuid is not a function")) {
+                toast({
+                  title: "שגיאה בשרת",
+                  description: "בעיה בייצור מזהים. נסה שוב או פנה לתמיכה.",
+                  variant: "destructive",
+                });
+                
+                throw new Error("שגיאת שרת: בעיה בייצור מזהים. נסה שוב מאוחר יותר.");
+              }
+            }
             
             // Try to get status options
             if (response.data?.statusOptions) {
@@ -125,19 +149,7 @@ export function useFetchDeliveries(isOnline: boolean) {
               description: `נטענו ${deliveryCount} משלוחים מהשרת`,
               variant: deliveryCount > 0 ? "default" : "destructive",
             });
-            
-            if (deliveryCount === 0 && response.data.failedRows && response.data.failedRows.length > 0) {
-              // Show error about failed rows
-              console.error("Failed rows:", response.data.failedRows);
-              
-              const firstError = response.data.failedRows[0].reason;
-              toast({
-                title: "שגיאה בעיבוד נתונים",
-                description: `שגיאה: ${firstError}. נכשלו ${response.data.failedRows.length} שורות.`,
-                variant: "destructive",
-              });
-            }
-            
+                        
             return {
               deliveries: fetchedDeliveries,
               statusOptions,
@@ -146,16 +158,7 @@ export function useFetchDeliveries(isOnline: boolean) {
           } else {
             console.error("No deliveries data in response:", response.data);
             
-            // If there's an error message, show it
-            if (response.data?.error) {
-              toast({
-                title: "שגיאה בעיבוד נתונים",
-                description: response.data.error,
-                variant: "destructive",
-              });
-            }
-            
-            throw new Error("לא התקבלו נתוני משלוחים מהשרת");
+            throw new Error("לא התקבלו נתוני משלוחים מהשרת. ייתכן בגלל בעיית הרשאות או מבנה טבלה שגוי.");
           }
         } catch (e) {
           console.error("Error fetching from Supabase:", e);
@@ -181,7 +184,7 @@ export function useFetchDeliveries(isOnline: boolean) {
             };
           } else {
             // No cached data and fetch failed - real error
-            throw new Error(e instanceof Error ? e.message : "לא ניתן לטעון משלוחים. אנא בדוק את החיבור שלך ונסה שוב.");
+            throw e;
           }
         }
       } else {

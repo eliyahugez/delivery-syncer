@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/context/AuthContext";
 import { isValidSheetUrl, cleanSheetUrl } from '@/utils/sheetUrlUtils';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface SheetsUrlSetterProps {
   onSync: () => void;
@@ -133,10 +134,19 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
           className={`w-full ${error ? 'border-red-500' : feedbackMessage && !error ? 'border-green-500' : ''}`}
         />
         {feedbackMessage && !error && (
-          <p className="text-green-600 text-sm">{feedbackMessage}</p>
+          <p className="text-green-600 text-sm flex items-center gap-1">
+            <CheckCircle size={16} />
+            {feedbackMessage}
+          </p>
         )}
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-        <div className="text-xs text-gray-500 mt-1">
+        {error && (
+          <p className="text-red-500 text-sm flex items-center gap-1">
+            <AlertCircle size={16} />
+            {error}
+          </p>
+        )}
+        <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+          <Info size={12} />
           הקישור צריך להיות בפורמט: https://docs.google.com/spreadsheets/d/SHEET_ID/edit
         </div>
       </div>
@@ -160,16 +170,22 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
       </div>
       
       {user?.sheetsUrl && (
-        <div className="mt-4 p-3 bg-slate-50 rounded-md border border-slate-200">
-          <h3 className="text-md font-medium">טיפים לסנכרון</h3>
-          <ul className="list-disc mr-5 mt-2 text-sm text-slate-700">
-            <li>וודא שיש הרשאות ציבוריות לצפייה בגיליון</li>
-            <li>אם אין נתונים שמופיעים, נסה ללחוץ על "סנכרן עם כוח"</li>
-            <li>וודא שיש עמודה עם מספרי מעקב בפורמט GWD או TM</li>
-            <li>וודא שיש כתובות תקינות בעמודה 5</li>
-            <li>וודא שיש שמות לקוחות בעמודה 6</li>
-          </ul>
-        </div>
+        <Alert variant="default" className="bg-yellow-50 border-yellow-200">
+          <AlertTitle className="text-md font-medium text-yellow-800">טיפים לסנכרון</AlertTitle>
+          <AlertDescription className="text-sm space-y-2">
+            <ul className="list-disc mr-5 mt-2 text-slate-700 space-y-1">
+              <li>וודא שיש הרשאות ציבוריות לצפייה בגיליון (הגדרות שיתוף -&gt; כל מי שיש לו את הקישור)</li>
+              <li>אם אין נתונים שמופיעים, נסה ללחוץ על "סנכרן עם כוח"</li>
+              <li>וודא שיש עמודה עם מספרי מעקב בפורמט GWD או TM</li>
+              <li>וודא שיש כתובות תקינות בגיליון</li>
+              <li>וודא שיש שמות לקוחות באחת העמודות</li>
+              <li>אם ממשיך להיכשל, בדוק את יומן השגיאות בקונסול הדפדפן (F12)</li>
+            </ul>
+            <div className="mt-4 p-2 bg-blue-50 border border-blue-100 rounded text-blue-800">
+              <p className="font-medium">שים לב: אם בגיליון יש הרבה שורות ריקות בסוף, אל תדאג - המערכת תתעלם מהן אוטומטית</p>
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
     </div>
   );
