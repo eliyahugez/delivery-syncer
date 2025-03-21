@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/context/AuthContext";
 import { isValidSheetUrl, cleanSheetUrl } from '@/utils/sheetUrlUtils';
-import { RefreshCw, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { RefreshCw, AlertCircle, CheckCircle, Info, ExternalLink } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface SheetsUrlSetterProps {
@@ -88,7 +88,8 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
         variant: "default",
       });
       
-      onSync();
+      // Force a sync after saving a new URL
+      handleForceSync();
     } catch (e) {
       console.error("Error saving sheets URL:", e);
       
@@ -118,7 +119,15 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
         variant: "destructive",
       });
     } finally {
-      setIsSyncing(false);
+      setTimeout(() => {
+        setIsSyncing(false);
+      }, 3000);
+    }
+  };
+
+  const openInBrowser = () => {
+    if (user?.sheetsUrl) {
+      window.open(`https://docs.google.com/spreadsheets/d/${user.sheetsUrl}`, '_blank');
     }
   };
 
@@ -150,22 +159,35 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
           הקישור צריך להיות בפורמט: https://docs.google.com/spreadsheets/d/SHEET_ID/edit
         </div>
       </div>
-      <div className="flex gap-2">
-        <Button onClick={handleSaveClick} disabled={isSaving}>
+      <div className="flex gap-2 flex-wrap">
+        <Button onClick={handleSaveClick} disabled={isSaving || isSyncing}>
           {isSaving ? "שומר..." : "שמור קישור"}
         </Button>
         
-        {urlInput && isValidSheetUrl(urlInput) && (
-          <Button 
-            variant="outline" 
-            type="button" 
-            onClick={handleForceSync}
-            className="flex items-center gap-1"
-            disabled={isSyncing}
-          >
-            <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
-            סנכרן עם כוח (Force Refresh)
-          </Button>
+        {user?.sheetsUrl && (
+          <>
+            <Button 
+              variant="outline" 
+              type="button" 
+              onClick={handleForceSync}
+              className="flex items-center gap-1"
+              disabled={isSaving || isSyncing}
+            >
+              <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
+              {isSyncing ? "מסנכרן..." : "סנכרן עם כוח (Force Refresh)"}
+            </Button>
+            
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={openInBrowser}
+              className="flex items-center gap-1"
+              disabled={isSaving || isSyncing}
+            >
+              <ExternalLink size={16} />
+              פתח בטאב חדש
+            </Button>
+          </>
         )}
       </div>
       
@@ -182,7 +204,7 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
               <li>אם ממשיך להיכשל, בדוק את יומן השגיאות בקונסול הדפדפן (F12)</li>
             </ul>
             <div className="mt-4 p-2 bg-blue-50 border border-blue-100 rounded text-blue-800">
-              <p className="font-medium">שים לב: אם בגיליון יש הרבה שורות ריקות בסוף, אל תדאג - המערכת תתעלם מהן אוטומטית</p>
+              <p className="font-medium">שים לב: שמירת קישור חדש תגרום לסנכרון אוטומטי של הנתונים</p>
             </div>
           </AlertDescription>
         </Alert>

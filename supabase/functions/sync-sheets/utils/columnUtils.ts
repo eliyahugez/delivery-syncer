@@ -119,12 +119,28 @@ export function analyzeColumns(columns: string[]): Record<string, number> {
   }
   
   if (columnMap.phone === undefined) {
-    // Phones are often in early-mid columns
-    for (let i = 2; i < Math.min(5, columns.length); i++) {
+    // Try to find phone by scanning for numbers that look like phone numbers
+    for (let i = 0; i < columns.length; i++) {
       if (!Object.values(columnMap).includes(i)) {
-        columnMap.phone = i;
-        console.log(`Assigning phone to column ${i} by position`);
-        break;
+        // Phone columns often have "phone" or "tel" in their headers
+        const colLower = columns[i].toLowerCase();
+        if (colLower.includes('phone') || colLower.includes('tel') || 
+            colLower.includes('טלפון') || colLower.includes('נייד')) {
+          columnMap.phone = i;
+          console.log(`Found potential phone column by name at index ${i}: "${columns[i]}"`);
+          break;
+        }
+      }
+    }
+    
+    // If still not found, try columns 4-8 which often contain phone numbers
+    if (columnMap.phone === undefined) {
+      for (let i = 4; i < Math.min(8, columns.length); i++) {
+        if (!Object.values(columnMap).includes(i)) {
+          columnMap.phone = i;
+          console.log(`Assigning phone to column ${i} by position`);
+          break;
+        }
       }
     }
   }

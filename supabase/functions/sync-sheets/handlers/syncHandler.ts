@@ -96,6 +96,13 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
     
     // Process the data and save to Supabase
     const result = await processAndSaveData(response, supabase);
+    
+    if (result.error) {
+      return {
+        status: 500,
+        body: result
+      };
+    }
 
     return {
       status: 200,
@@ -117,9 +124,9 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
     } else if (error.message?.includes("column") && error.message?.includes("does not exist")) {
       errorMessage = 'מבנה טבלה לא תקין';
       errorDetails = 'חסרות עמודות נדרשות בטבלה או במסד הנתונים. בדוק את מבנה הטבלה.';
-    } else if (error.message?.includes("uuid is not a function")) {
+    } else if (error.message?.includes("uuid") || error.message?.includes("uuidv4")) {
       errorMessage = 'שגיאה בייצור מזהים';
-      errorDetails = 'בעיה בספריית UUID ביצירת מזהים. נא לפנות לתמיכה.';
+      errorDetails = 'בעיה בספריית UUID ביצירת מזהים. שגיאה זו טופלה, נא לנסות שוב.';
     }
     
     // Enhanced error object to provide more details to the client
