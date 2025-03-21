@@ -1,3 +1,5 @@
+import { cleanPhoneNumber } from '@/utils/textCleaners';
+
 export function usePhoneFormatter() {
   // Format phone number to international format
   const formatPhoneNumber = (phone: string): string => {
@@ -10,19 +12,19 @@ export function usePhoneFormatter() {
       return '';
     }
     
-    // Remove non-digit characters
-    let digits = phone.replace(/\D/g, "");
+    // Clean the phone number first, removing any non-digit characters
+    const cleanedPhone = cleanPhoneNumber(phone);
     
     // Format to international format (+972)
-    if (digits.startsWith("972")) {
-      return `+${digits}`;
-    } else if (digits.startsWith("0")) {
-      return `+972${digits.substring(1)}`;
+    if (cleanedPhone.startsWith("972")) {
+      return `+${cleanedPhone}`;
+    } else if (cleanedPhone.startsWith("0")) {
+      return `+972${cleanedPhone.substring(1)}`;
     }
     
     // If it's not starting with 0 or 972, and it has 9-10 digits, assume it's a local number
-    if (digits.length >= 9 && digits.length <= 10) {
-      return `+972${digits}`;
+    if (cleanedPhone.length >= 9 && cleanedPhone.length <= 10) {
+      return `+972${cleanedPhone}`;
     }
     
     // Otherwise, return as is

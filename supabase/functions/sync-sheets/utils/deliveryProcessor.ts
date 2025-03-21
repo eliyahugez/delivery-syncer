@@ -1,6 +1,27 @@
+
 import { getValueByField, isSheetDateValue, formatSheetDate } from "./columnUtils.ts";
 import { normalizeStatus } from "./statusUtils.ts";
 import { v4 as uuidv4 } from "https://deno.land/std@0.177.0/uuid/mod.ts";
+
+// Function to clean and format phone numbers
+function cleanPhoneNumber(phone: string): string {
+  if (!phone) return '';
+  
+  // Remove all non-digit characters except + (for international format)
+  return phone.replace(/[^\d+]/g, '');
+}
+
+// Function to clean addresses by removing special characters
+function cleanAddress(address: string): string {
+  if (!address) return '';
+  
+  // Remove extra spaces, redundant dashes and commas
+  let cleaned = address.replace(/\s+/g, ' ');  // Replace multiple spaces with single space
+  cleaned = cleaned.replace(/^[-,.\s]+|[-,.\s]+$/g, ''); // Remove special chars at start/end
+  cleaned = cleaned.trim();
+  
+  return cleaned;
+}
 
 // Process a single row from Google Sheets into a delivery object
 export async function processDeliveryRow(
@@ -8,7 +29,8 @@ export async function processDeliveryRow(
   rowIndex: number, 
   columnMap: Record<string, number>,
   seenTrackingNumbers: Set<string>,
-  supabase: any
+  supabase: any,
+  options: any = {}
 ) {
   try {
     if (!row.c) {
@@ -46,7 +68,7 @@ export async function processDeliveryRow(
       // Try to find a tracking number in any column
       for (let i = 0; i < cellValues.length; i++) {
         const value = String(cellValues[i] || '');
-        if (value.includes('TM') || value.includes('GWD')) {
+        if (value.includes('TM') || value.includes('GWD') || value.includes('TK')) {
           trackingNumber = value;
           console.log(`Found tracking number in column ${i}: ${trackingNumber}`);
           break;
@@ -62,6 +84,28 @@ export async function processDeliveryRow(
     
     // Get customer name
     let name = getValueByField(cellValues, 'name', columnMap);
+    
+    // Common city names that could appear in the name field
+    const cityNames = [
+      "Karnei Shomron", "Karney Shomron", "Karnie Shomron", "Karni Shomron",
+      "קרני שומרון", "Ginot Shomron", "גינות שומרון", "Maale Shomron", "מעלה שומרון"
+    ];
+    
+    // Check if name is just a city
+    if (name && cityNames.some(city => 
+      name.toLowerCase() === city.toLowerCase() || 
+      name.toLowerCase().includes(city.toLowerCase())
+    )) {
+      console.log(`Name appears to be just a city: "${name}"`);
+      const cityName = cityNames.find(city => 
+        name.toLowerCase() === city.toLowerCase() || 
+        name.toLowerCase().includes(city.toLowerCase())
+      );
+      
+      if (cityName) {
+        name = `לקוח ב${cityName}`;
+      }
+    }
     
     // ENHANCED: Check if name looks like a date value from Google Sheets
     if (isSheetDateValue(name)) {
@@ -97,6 +141,11 @@ export async function processDeliveryRow(
     let address = getValueByField(cellValues, 'address', columnMap);
     const city = getValueByField(cellValues, 'city', columnMap);
     
+    // Clean the address
+    if (address) {
+      address = cleanAddress(address);
+    }
+    
     // If no address found or it's very short, look for a longer text field
     if (!address || address.length < 5) {
       // Try to find a column that has longer text likely to be an address
@@ -106,7 +155,7 @@ export async function processDeliveryRow(
           // Skip columns that are already mapped to something else
           const isAlreadyMapped = Object.values(columnMap).includes(i);
           if (!isAlreadyMapped) {
-            address = value;
+            address = cleanAddress(value);
             console.log(`Inferred address from column ${i}: ${address}`);
             break;
           }
@@ -167,6 +216,8 @@ export async function processDeliveryRow(
     }
     
     if (phone) {
+      // Clean the phone number
+      phone = cleanPhoneNumber(phone);
       phone = formatPhoneNumber(phone);
     }
     
@@ -180,7 +231,7 @@ export async function processDeliveryRow(
     const scanDate = getValueByField(cellValues, 'scanDate', columnMap) || now;
     
     // Get assigned courier
-    let assignedTo = getValueByField(cellValues, 'assignedTo', columnMap) || "";
+    let assignedTo = getValueByField(cellValues, 'assignedTo', columnMap) || options.courierName || "";
     
     // Get external ID if available
     const externalId = getValueByField(cellValues, 'externalId', columnMap) || trackingNumber;
@@ -211,6 +262,9 @@ export async function processDeliveryRow(
       }
     }
     
+    // Import metadata from options
+    const { batchId, importTimestamp } = options;
+    
     // Create the delivery record
     const deliveryRecord = {
       tracking_number: trackingNumber,
@@ -222,7 +276,9 @@ export async function processDeliveryRow(
       external_id: externalId,
       status_date: statusDate,
       scan_date: scanDate,
-      row_index: rowIndex
+      row_index: rowIndex,
+      import_batch: batchId,
+      import_timestamp: importTimestamp
     };
     
     // Create the delivery object for the return value
@@ -236,7 +292,8 @@ export async function processDeliveryRow(
       assignedTo: assignedTo || 'לא שויך',
       externalId,
       statusDate,
-      scanDate
+      scanDate,
+      importBatch: batchId
     };
     
     return { delivery, dbRecord: deliveryRecord };
@@ -265,6 +322,32 @@ export async function saveDeliveryToDatabase(
       
     if (error) {
       console.error("Database error saving delivery:", error);
+      
+      // If column doesn't exist, try removing it and retrying (helps with schema changes)
+      if (error.message && error.message.includes('column') && error.message.includes('does not exist')) {
+        const columnName = error.message.match(/column ["'](.+?)["']/i)?.[1];
+        
+        if (columnName && deliveryResult.dbRecord[columnName]) {
+          console.log(`Removing non-existent column '${columnName}' and retrying`);
+          
+          // Remove the problematic column and retry
+          const { [columnName]: _, ...cleanedRecord } = deliveryResult.dbRecord;
+          
+          const { error: retryError } = await supabase
+            .from('deliveries')
+            .upsert(cleanedRecord, {
+              onConflict: 'tracking_number',
+              returning: 'minimal'
+            });
+            
+          if (retryError) {
+            return { success: false, error: retryError.message, details: retryError.details };
+          }
+          
+          return { success: true, id: deliveryResult.delivery.id };
+        }
+      }
+      
       return { success: false, error: error.message, details: error.details };
     }
     

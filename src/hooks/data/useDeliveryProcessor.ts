@@ -1,13 +1,21 @@
 
 import { Delivery } from "@/types/delivery";
 import { usePhoneFormatter } from "./usePhoneFormatter";
+import { cleanCustomerName, cleanAddress, cleanPhoneNumber } from "@/utils/textCleaners";
 
 export function useDeliveryProcessor() {
   const { formatPhoneNumber } = usePhoneFormatter();
   
+  // List of known city names that might appear in the customer name field
+  const cityNames = [
+    "Karnei Shomron", "Karney Shomron", "Karnie Shomron", "Karni Shomron",
+    "קרני שומרון", "Ginot Shomron", "גינות שומרון", "Maale Shomron", "מעלה שומרון",
+    "Kedumim", "קדומים", "Ariel", "אריאל", "Emanuel", "עמנואל"
+  ];
+  
   // Process the name field - handle date values specifically
-  const processName = (name: string | undefined): string => {
-    if (!name) return '';
+  const processName = (name: string | undefined, trackingNumber: string | undefined): string => {
+    if (!name) return `לקוח ${trackingNumber || 'לא ידוע'}`;
     
     let processedName = name;
     
@@ -26,15 +34,21 @@ export function useDeliveryProcessor() {
       }
     }
     
-    return processedName;
+    // Clean the name to remove or replace city names
+    processedName = cleanCustomerName(processedName, cityNames);
+    
+    return processedName || `לקוח ${trackingNumber || 'לא ידוע'}`;
   };
   
   // Process a delivery
   const processDelivery = (delivery: Delivery): Delivery => {
     // Process name
-    const processedName = processName(delivery.name);
+    const processedName = processName(delivery.name, delivery.trackingNumber);
     
-    // Check if phone field contains status info
+    // Process address - clean it
+    const processedAddress = cleanAddress(delivery.address || '');
+    
+    // Process phone
     let processedPhone = delivery.phone || '';
     if (processedPhone.toLowerCase().includes('delivered') || 
         processedPhone.toLowerCase().includes('נמסר') ||
@@ -42,19 +56,16 @@ export function useDeliveryProcessor() {
       // Don't show status in phone field
       processedPhone = '';
     } else {
-      // Format the phone number normally
-      processedPhone = formatPhoneNumber(delivery.phone);
+      // Clean the phone number first, then format it
+      processedPhone = cleanPhoneNumber(processedPhone);
+      processedPhone = formatPhoneNumber(processedPhone);
     }
     
-    // Ensure customer name is not empty or just the tracking number
-    const finalName = processedName && processedName !== delivery.trackingNumber 
-      ? processedName 
-      : `לקוח ${delivery.trackingNumber || 'לא ידוע'}`;
-      
     return {
       ...delivery,
-      name: finalName,
-      phone: processedPhone
+      name: processedName,
+      phone: processedPhone,
+      address: processedAddress
     };
   };
   

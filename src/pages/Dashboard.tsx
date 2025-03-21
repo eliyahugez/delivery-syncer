@@ -9,9 +9,13 @@ import SheetsUrlSetter from "@/components/settings/SheetsUrlSetter";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import ErrorDisplay from "@/components/dashboard/ErrorDisplay";
 import { useLocationTracking } from "@/hooks/useLocationTracking";
+import DeliveryCompletionDialog from "@/components/deliveries/modals/DeliveryCompletionDialog";
+import DeliveryArchiveManager from "@/components/settings/DeliveryArchiveManager";
+import { useToast } from "@/components/ui/use-toast";
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const {
     deliveries,
     isLoading,
@@ -29,6 +33,13 @@ const Dashboard = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "groups">("groups"); // Default to groups view
   const [showImportModal, setShowImportModal] = useState(false);
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<{
+    id: string;
+    trackingNumber: string;
+    address: string;
+    customerName: string;
+  } | null>(null);
   
   const { 
     userLocation, 
@@ -39,7 +50,7 @@ const Dashboard = () => {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      await fetchDeliveries();
+      await fetchDeliveries(true); // Force refresh
     } finally {
       setIsSyncing(false);
     }
@@ -61,6 +72,43 @@ const Dashboard = () => {
     await updateStatus(id, newStatus, updateType);
   };
   
+  const handleDeliveryCompletion = (id: string, deliveryInfo: any) => {
+    setSelectedDelivery({
+      id,
+      trackingNumber: deliveryInfo.trackingNumber,
+      address: deliveryInfo.address,
+      customerName: deliveryInfo.customerName
+    });
+    setCompletionDialogOpen(true);
+  };
+  
+  const handleCompleteDelivery = async (recipientName: string) => {
+    if (!selectedDelivery) return;
+    
+    // Find the "delivered" status option
+    const deliveredOption = deliveryStatusOptions.find(option => 
+      option.value.toLowerCase().includes('delivered') || 
+      option.value.includes('נמסר')
+    );
+    
+    if (deliveredOption) {
+      await updateStatus(
+        selectedDelivery.id, 
+        deliveredOption.value, 
+        `נמסר ל${recipientName}`
+      );
+      
+      toast({
+        title: "משלוח הושלם",
+        description: `המשלוח נמסר ל${recipientName}`,
+        variant: "default"
+      });
+    }
+    
+    setCompletionDialogOpen(false);
+    setSelectedDelivery(null);
+  };
+  
   const handleImportComplete = (importedData: any[], mappings: Record<string, string>) => {
     console.log("Import completed:", importedData.length, "items");
     console.log("Column mappings:", mappings);
@@ -68,6 +116,14 @@ const Dashboard = () => {
     // Refresh data after import
     fetchDeliveries();
     setShowImportModal(false);
+  };
+  
+  const handleArchive = (courierName: string, deliveryDate: string) => {
+    // This would be implemented with a backend call to archive deliveries
+    toast({
+      title: "פונקציית ארכיון",
+      description: `פונקציה זו תיושם בגרסה הבאה. נבחר: ${courierName}, תאריך: ${deliveryDate}`,
+    });
   };
 
   // Show the SheetsUrlSetter if no sheets URL is provided
@@ -94,7 +150,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="container mx-auto px-1 py-2 md:px-4 md:py-6">
       <DashboardHeader 
         isOnline={isOnline}
         lastSyncTime={lastSyncTime}
@@ -111,12 +167,17 @@ const Dashboard = () => {
       />
 
       <ErrorDisplay error={error} handleSync={handleSync} />
+      
+      <div className="mb-2">
+        <DeliveryArchiveManager onArchive={handleArchive} />
+      </div>
 
-      <main>
+      <main className="pb-16"> {/* Add padding at the bottom for mobile action buttons */}
         {viewMode === "table" ? (
           <DeliveryTable
             deliveries={deliveries}
             onUpdateStatus={handleUpdateStatus}
+            onCompleteDelivery={handleDeliveryCompletion}
             isLoading={isLoading}
             sheetsUrl={user?.sheetsUrl}
             statusOptions={deliveryStatusOptions}
@@ -126,10 +187,25 @@ const Dashboard = () => {
             groups={deliveryGroups}
             statusOptions={deliveryStatusOptions}
             onUpdateStatus={handleUpdateStatus}
+            onCompleteDelivery={handleDeliveryCompletion}
             isLoading={isLoading}
           />
         )}
       </main>
+      
+      {/* Completion Dialog */}
+      {selectedDelivery && (
+        <DeliveryCompletionDialog
+          isOpen={completionDialogOpen}
+          onClose={() => setCompletionDialogOpen(false)}
+          onComplete={handleCompleteDelivery}
+          deliveryInfo={{
+            trackingNumber: selectedDelivery.trackingNumber,
+            address: selectedDelivery.address,
+            customerName: selectedDelivery.customerName
+          }}
+        />
+      )}
       
       {/* Import Modal */}
       {showImportModal && (

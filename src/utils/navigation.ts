@@ -1,30 +1,47 @@
 
 import { useIsMobile } from '@/hooks/use-mobile';
+import { translateAddressToHebrew } from './textCleaners';
 
-export function openNavigation(address: string) {
+export async function openNavigation(address: string) {
   if (!address) return;
   
-  // עיבוד הכתובת לפורמט מתאים
-  const encodedAddress = encodeURIComponent(address);
-  
-  // בדיקה אם המשתמש במובייל
-  if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-    // במובייל, ננסה להשתמש בוויז (מועדף לשליחים)
-    // אם וויז לא מותקן, יפתח את גוגל מפות
-    try {
-      window.location.href = `waze://?q=${encodedAddress}&navigate=yes`;
-      
-      // כגיבוי, אם וויז לא נפתח תוך 2 שניות, פתח בדפדפן
-      setTimeout(() => {
-        window.open(`https://waze.com/ul?q=${encodedAddress}&navigate=yes`, '_blank');
-      }, 2000);
-    } catch (e) {
-      // אם וויז נכשל, פתח בגוגל מפות
+  try {
+    // First translate the address to Hebrew for better Waze results
+    const translatedAddress = await translateAddressToHebrew(address);
+    console.log(`Navigating to address: ${address}`);
+    console.log(`Translated address: ${translatedAddress}`);
+    
+    // עיבוד הכתובת לפורמט מתאים
+    const encodedAddress = encodeURIComponent(translatedAddress);
+    
+    // בדיקה אם המשתמש במובייל
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // במובייל, ננסה להשתמש בוויז (מועדף לשליחים)
+      // אם וויז לא מותקן, יפתח את גוגל מפות
+      try {
+        window.location.href = `waze://?q=${encodedAddress}&navigate=yes`;
+        
+        // כגיבוי, אם וויז לא נפתח תוך 2 שניות, פתח בדפדפן
+        setTimeout(() => {
+          window.open(`https://waze.com/ul?q=${encodedAddress}&navigate=yes`, '_blank');
+        }, 2000);
+      } catch (e) {
+        // אם וויז נכשל, פתח בגוגל מפות
+        window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
+      }
+    } else {
+      // בדסקטופ, פתח בגוגל מפות
       window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
     }
-  } else {
-    // בדסקטופ, פתח בגוגל מפות
-    window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
+  } catch (error) {
+    console.error("Error in navigation:", error);
+    // Fallback to original address if translation fails
+    const encodedAddress = encodeURIComponent(address);
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      window.location.href = `waze://?q=${encodedAddress}&navigate=yes`;
+    } else {
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
+    }
   }
 }
 

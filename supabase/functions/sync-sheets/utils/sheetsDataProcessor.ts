@@ -4,10 +4,13 @@ import { processDeliveryRow, saveDeliveryToDatabase } from "./deliveryProcessor.
 import { getTableColumns } from "./dbDebug.ts";
 import { getColumnMappings, saveColumnMappings } from "./sheetProcessing/columnMapping.ts";
 import { getStatusOptions } from "./sheetProcessing/statusOptionsProcessor.ts";
+import { v4 as uuidv4 } from "https://deno.land/std@0.177.0/uuid/mod.ts";
 
 interface ProcessOptions {
   forceRefresh?: boolean;
   customColumnMappings?: Record<string, number>;
+  archiveOld?: boolean;
+  courierName?: string;
 }
 
 // Function to process Google Sheets data and save to Supabase
@@ -54,6 +57,10 @@ export async function processAndSaveData(sheetsData: any, supabase: any, options
   // Track seen tracking numbers to avoid duplicates
   const seenTrackingNumbers = new Set<string>();
   
+  // Generate a batch ID for this import (useful for archiving)
+  const batchId = uuidv4();
+  const importTimestamp = new Date().toISOString();
+  
   // Process each row in the sheet
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -64,7 +71,14 @@ export async function processAndSaveData(sheetsData: any, supabase: any, options
     }
     
     try {
-      const result = await processDeliveryRow(row, i, columnMap, seenTrackingNumbers, supabase);
+      // Add import metadata for archiving purposes
+      const processingOptions = {
+        batchId,
+        importTimestamp,
+        courierName: options.courierName
+      };
+      
+      const result = await processDeliveryRow(row, i, columnMap, seenTrackingNumbers, supabase, processingOptions);
       
       if (result.error) {
         failedRows.push({ index: i, reason: result.error });
@@ -83,6 +97,20 @@ export async function processAndSaveData(sheetsData: any, supabase: any, options
         customerGroups[customerName] = [];
       }
       customerGroups[customerName].push(result.delivery);
+      
+      // If archiving is enabled and we have an old status date, set the archived flag
+      if (options.archiveOld && result.dbRecord.status_date) {
+        const statusDate = new Date(result.dbRecord.status_date);
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        
+        if (statusDate < twoWeeksAgo) {
+          result.dbRecord.archived = true;
+          result.dbRecord.archive_date = importTimestamp;
+          result.dbRecord.archive_batch = batchId;
+          result.dbRecord.archived_by = options.courierName || 'system';
+        }
+      }
       
       // Save to database
       const saveResult = await saveDeliveryToDatabase(result, supabase);
@@ -135,6 +163,8 @@ export async function processAndSaveData(sheetsData: any, supabase: any, options
     })),
     statusOptions,
     count: deliveries.length,
+    batchId,
+    importTimestamp,
     failedRows: failedRows.length > 0 ? failedRows : undefined
   };
 }
