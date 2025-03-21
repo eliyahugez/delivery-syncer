@@ -19,44 +19,70 @@ export function useDeliveryGroups(deliveries: Delivery[]) {
     const groups: Record<string, DeliveryGroup> = {};
     
     deliveries.forEach(delivery => {
-      // Clean customer name to prevent empty or tracking number groups
-      let customerName = delivery.name || '';
-      
-      // Check if name is just a date marker from the delivery processor
-      if (customerName.startsWith('[DATE]')) {
-        // Extract just the date for display
-        const dateValue = customerName.replace('[DATE]', '').trim();
-        customerName = `תאריך: ${dateValue}`;
+      // Skip invalid deliveries
+      if (!delivery.trackingNumber) {
+        console.log("Skipping delivery with no tracking number");
+        return;
       }
       
-      // If the name is empty, just the tracking number, or looks like an auto-tracking,
-      // use a consistent placeholder with the tracking number
-      if (!customerName || 
-          customerName === delivery.trackingNumber ||
-          customerName.trim() === '' ||
-          /^AUTO-\d+$/.test(delivery.trackingNumber || '')) {
-        customerName = `לקוח ${delivery.trackingNumber || 'לא ידוע'}`;
+      // IMPROVED: Use a better grouping algorithm
+      // 1. If name contains actual person name, group by name
+      // 2. If name is a date, group by address
+      // 3. If name is AUTO-, group by address if possible
+      
+      let customerName = delivery.name?.trim() || '';
+      let groupKey = '';
+      let shouldUseAddressGrouping = false;
+      
+      // Check if the name is in date format or marked as a date
+      const isDatePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(customerName) || 
+                            customerName.startsWith('[DATE]') ||
+                            customerName.startsWith('תאריך:');
+                            
+      // Check if tracking number is AUTO-XX format
+      const isAutoTracking = /^AUTO-\d+$/.test(delivery.trackingNumber);
+      
+      // Check if name is empty or just the tracking number
+      const isEmptyOrTrackingName = !customerName || 
+                                     customerName === delivery.trackingNumber ||
+                                     customerName === 'לא ידוע';
+      
+      // Determine if we should group by address
+      if (isDatePattern || isAutoTracking || isEmptyOrTrackingName) {
+        shouldUseAddressGrouping = true;
       }
       
-      // Improved delivery grouping
-      let groupKey = customerName;
-      
-      // If the name looks like a date, group by address instead
-      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(customerName) || customerName.startsWith('תאריך:')) {
-        if (delivery.address) {
-          // Extract first part of address before comma
-          const addressParts = delivery.address.split(',');
-          const mainAddress = addressParts[0].trim();
-          
-          // Use address as primary grouping key instead of date
-          groupKey = mainAddress;
-          console.log(`Using address "${mainAddress}" as grouping key instead of date "${customerName}"`);
+      // If we should use address grouping and there is an address, use that
+      if (shouldUseAddressGrouping && delivery.address) {
+        // Extract main location from address for better grouping
+        const addressParts = delivery.address.split(/[-,]/);
+        const mainLocation = addressParts[0]?.trim();
+        
+        if (mainLocation && mainLocation.length > 2) {
+          // Use location as the grouping key
+          groupKey = mainLocation;
+          customerName = mainLocation;
+          console.log(`Using address "${mainLocation}" as grouping key`);
+        } else {
+          // Fallback to full address if we can't extract a good main location
+          groupKey = delivery.address;
+          customerName = delivery.address;
         }
+      } else {
+        // Use the customer name as the grouping key
+        groupKey = customerName;
       }
       
+      // If we still don't have a good group key, use tracking number as last resort
+      if (!groupKey || groupKey.length < 2) {
+        groupKey = `לקוח ${delivery.trackingNumber}`;
+        customerName = groupKey;
+      }
+      
+      // Initialize the group if it doesn't exist
       if (!groups[groupKey]) {
         groups[groupKey] = {
-          customerName: groupKey,
+          customerName: customerName,
           deliveries: [],
           totalDeliveries: 0,
           latestStatus: '',
@@ -88,8 +114,12 @@ export function useDeliveryGroups(deliveries: Delivery[]) {
         groups[groupKey].trackingNumbers.push(delivery.trackingNumber);
       }
       
-      // Add unique phone
-      if (delivery.phone && !groups[groupKey].phones.includes(delivery.phone)) {
+      // Add unique phone (only if it's not status information)
+      if (delivery.phone && 
+          !delivery.phone.toLowerCase().includes('delivered') &&
+          !delivery.phone.toLowerCase().includes('נמסר') &&
+          !delivery.phone.toLowerCase().includes('status') &&
+          !groups[groupKey].phones.includes(delivery.phone)) {
         groups[groupKey].phones.push(delivery.phone);
       }
     });
