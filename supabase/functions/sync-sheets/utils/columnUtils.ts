@@ -1,183 +1,124 @@
 
-// Utility functions for column mapping
-
-/**
- * Analyzes sheet columns and maps them to expected field names
- * This is a critical part of the functionality as it determines how data is interpreted
- */
-export function analyzeColumns(columns: string[]): Record<string, number> {
+// Function to analyze columns in a Google Sheets table and map them to our expected fields
+export function analyzeColumns(columns: string[]) {
   console.log("Analyzing columns:", columns);
-  const columnMap: Record<string, number> = {};
   
-  // First pass: exact keyword matching
-  columns.forEach((col, index) => {
-    const colLower = col.toLowerCase();
+  const columnMap: Record<string, number> = {};
+  const trackedFields = [
+    "trackingNumber", 
+    "name", 
+    "phone", 
+    "address", 
+    "city", 
+    "status", 
+    "statusDate", 
+    "scanDate", 
+    "assignedTo", 
+    "externalId"
+  ];
+  
+  // Direct mapping based on common field names in Hebrew and English
+  const fieldMatchers: Record<string, string[]> = {
+    "trackingNumber": [
+      "tracking", "מעקב", "track", "מספר מעקב", "מספר מעקב", "tracking number", 
+      "tracking_number", "trackingNumber", "מספר", "number", "מזהה", "id", "TM", "GWD"
+    ],
+    "name": [
+      "name", "שם", "שם לקוח", "לקוח", "customer", "customer name", "customerName", 
+      "שם מלא", "full name", "fullName"
+    ],
+    "phone": [
+      "phone", "טלפון", "מספר טלפון", "phone number", "phoneNumber", "טל", "נייד", 
+      "mobile", "phone", "cel", "cell"
+    ],
+    "address": [
+      "address", "כתובת", "כתובת מלאה", "full address", "fullAddress", "מען", 
+      "מיקום", "location", "כתובת למשלוח", "delivery address", "deliveryAddress",
+      "רחוב", "בית", "דירה"
+    ],
+    "city": [
+      "city", "עיר", "ישוב", "city", "town", "settlement", "location", "מיקום"
+    ],
+    "status": [
+      "status", "סטטוס", "מצב", "state", "condition", "delivery status", 
+      "deliveryStatus", "סטטוס משלוח", "status"
+    ],
+    "statusDate": [
+      "status date", "statusDate", "תאריך סטטוס", "תאריך עדכון", "update date", 
+      "updateDate", "תאריך שינוי סטטוס", "status change date", "statusChangeDate"
+    ],
+    "scanDate": [
+      "scan date", "scanDate", "תאריך סריקה", "תאריך קליטה", "entry date", 
+      "entryDate", "תאריך קבלה", "receive date", "receiveDate", "תאריך"
+    ],
+    "assignedTo": [
+      "assigned to", "assignedTo", "שיוך", "שויך ל", "שליח", "courier", "מחלק", 
+      "distributor", "נהג", "driver", "שם שליח", "courier name", "courierName"
+    ],
+    "externalId": [
+      "external id", "externalId", "מזהה חיצוני", "external identifier", 
+      "externalIdentifier", "מזהה מערכת", "system id", "systemId", "מזהה לקוח",
+      "customer id", "customerId"
+    ]
+  };
+  
+  // Position-based mapping for common spreadsheet formats
+  const positionMapping: Record<number, string> = {
+    0: "trackingNumber", // First column is typically tracking number
+    1: "status",         // Second column often contains status
+    2: "name",           // Third column often contains name
+    3: "address",        // Fourth column often contains address
+    4: "phone"           // Fifth column often contains phone
+  };
+  
+  // First try exact matching based on column headers
+  columns.forEach((column, index) => {
+    const lowerColumn = column.toLowerCase().trim();
     
-    // Tracking number detection - very important
-    if (colLower.includes('track') || colLower.includes('מעקב') || colLower.includes('מספר הזמנה') || 
-        colLower.includes('tm') || colLower.includes('gwd') || colLower.includes('סריאלי')) {
-      columnMap.trackingNumber = index;
-      console.log(`Found tracking number column at index ${index}: "${col}"`);
-    }
-    
-    // Name detection
-    else if ((colLower.includes('name') || colLower.includes('שם')) && 
-             !colLower.includes('last') && !colLower.includes('user') && 
-             !colLower.includes('משפחה')) {
-      columnMap.name = index;
-      console.log(`Found name column at index ${index}: "${col}"`);
-    }
-    
-    // Address detection
-    else if (colLower.includes('address') || colLower.includes('כתובת')) {
-      columnMap.address = index;
-      console.log(`Found address column at index ${index}: "${col}"`);
-    }
-    
-    // City detection  
-    else if (colLower.includes('city') || colLower.includes('עיר') || 
-             colLower.includes('יישוב') || colLower.includes('ישוב')) {
-      columnMap.city = index;
-      console.log(`Found city column at index ${index}: "${col}"`);
-    }
-    
-    // Phone detection
-    else if (colLower.includes('phone') || colLower.includes('טלפון') || 
-             colLower.includes('מספר טלפון') || colLower.includes('נייד')) {
-      columnMap.phone = index;
-      console.log(`Found phone column at index ${index}: "${col}"`);
-    }
-    
-    // Status detection
-    else if (colLower.includes('status') || colLower.includes('סטטוס') || 
-             colLower.includes('מצב')) {
-      columnMap.status = index;
-      console.log(`Found status column at index ${index}: "${col}"`);
-    }
-    
-    // Courier/assignee detection
-    else if (colLower.includes('courier') || colLower.includes('שליח') || 
-             colLower.includes('driver') || colLower.includes('נהג') || 
-             colLower.includes('assigned')) {
-      columnMap.assignedTo = index;
-      console.log(`Found assigned_to column at index ${index}: "${col}"`);
-    }
-    
-    // Date detection
-    else if (colLower.includes('date') || colLower.includes('תאריך')) {
-      // If already have a scan date, this might be status date
-      if (columnMap.scanDate !== undefined) {
-        columnMap.statusDate = index;
-        console.log(`Found status date column at index ${index}: "${col}"`);
-      } else {
-        columnMap.scanDate = index;
-        console.log(`Found scan date column at index ${index}: "${col}"`);
+    // Try to find a match in our field matchers
+    for (const field of trackedFields) {
+      const matchers = fieldMatchers[field];
+      
+      if (matchers.some(matcher => 
+        lowerColumn === matcher.toLowerCase() || 
+        lowerColumn.includes(matcher.toLowerCase())
+      )) {
+        columnMap[field] = index;
+        console.log(`Matched column "${column}" at index ${index} to field "${field}"`);
+        break;
       }
-    }
-    
-    // External ID detection
-    else if (colLower.includes('external') || colLower.includes('id') || 
-             colLower.includes('reference') || colLower.includes('חיצוני') || 
-             colLower.includes('אסמכתא')) {
-      columnMap.externalId = index;
-      console.log(`Found external ID column at index ${index}: "${col}"`);
     }
   });
   
-  // If critical columns aren't found, try position-based detection for common layouts
-  if (columnMap.trackingNumber === undefined) {
-    // In many sheets, tracking numbers are in the first few columns
-    for (let i = 0; i < Math.min(3, columns.length); i++) {
-      if (!Object.values(columnMap).includes(i)) {
-        columnMap.trackingNumber = i;
-        console.log(`Assigning tracking number to column ${i} by position`);
-        break;
-      }
+  // For any fields that weren't mapped, try position-based mapping
+  Object.entries(positionMapping).forEach(([posStr, field]) => {
+    const position = parseInt(posStr);
+    if (position < columns.length && !columnMap[field]) {
+      columnMap[field] = position;
+      console.log(`Position-mapped column at index ${position} to field "${field}"`);
     }
+  });
+  
+  // If we still don't have a tracking number column, try to find something that looks like a tracking number
+  if (!columnMap["trackingNumber"] && columns.length > 0) {
+    // Default to the first column as tracking number if nothing else matched
+    columnMap["trackingNumber"] = 0;
+    console.log(`Defaulted first column to tracking number field`);
   }
   
-  if (columnMap.name === undefined) {
-    // Customer names are often in columns 3-6
-    for (let i = 2; i < Math.min(6, columns.length); i++) {
-      if (!Object.values(columnMap).includes(i)) {
-        columnMap.name = i;
-        console.log(`Assigning name to column ${i} by position`);
-        break;
-      }
-    }
-  }
-  
-  if (columnMap.address === undefined) {
-    // Addresses are often in the middle columns
-    for (let i = 3; i < Math.min(7, columns.length); i++) {
-      if (!Object.values(columnMap).includes(i)) {
-        columnMap.address = i;
-        console.log(`Assigning address to column ${i} by position`);
-        break;
-      }
-    }
-  }
-  
-  if (columnMap.phone === undefined) {
-    // Try to find phone by scanning for numbers that look like phone numbers
-    for (let i = 0; i < columns.length; i++) {
-      if (!Object.values(columnMap).includes(i)) {
-        // Phone columns often have "phone" or "tel" in their headers
-        const colLower = columns[i].toLowerCase();
-        if (colLower.includes('phone') || colLower.includes('tel') || 
-            colLower.includes('טלפון') || colLower.includes('נייד')) {
-          columnMap.phone = i;
-          console.log(`Found potential phone column by name at index ${i}: "${columns[i]}"`);
-          break;
-        }
-      }
-    }
-    
-    // If still not found, try columns 4-8 which often contain phone numbers
-    if (columnMap.phone === undefined) {
-      for (let i = 4; i < Math.min(8, columns.length); i++) {
-        if (!Object.values(columnMap).includes(i)) {
-          columnMap.phone = i;
-          console.log(`Assigning phone to column ${i} by position`);
-          break;
-        }
-      }
-    }
-  }
-  
-  // Print the final mapping for debugging
+  // Log the final mapping
   console.log("Final column mapping:", columnMap);
-  
   return columnMap;
 }
 
-/**
- * Gets a value from a row based on a field name and column mapping
- */
-export function getValueByField(
-  values: any[],
-  fieldName: string,
-  columnMap: Record<string, number>
-): string {
-  if (columnMap[fieldName] === undefined || values.length <= columnMap[fieldName]) {
-    return '';
+// Get a value from a row based on a field name and column mapping
+export function getValueByField(values: any[], field: string, columnMap: Record<string, number>): string {
+  const columnIndex = columnMap[field];
+  
+  if (columnIndex === undefined || columnIndex >= values.length) {
+    return "";
   }
   
-  const value = values[columnMap[fieldName]];
-  return value !== null && value !== undefined ? String(value).trim() : '';
-}
-
-/**
- * Helper function to find the index of a column by keyword, with fuzzy matching
- */
-export function findColumnIndex(columns: string[], keywords: string[]): number {
-  for (let i = 0; i < columns.length; i++) {
-    const colLower = columns[i].toLowerCase();
-    for (const keyword of keywords) {
-      if (colLower.includes(keyword.toLowerCase())) {
-        return i;
-      }
-    }
-  }
-  return -1;
+  const value = values[columnIndex];
+  return value !== null && value !== undefined ? String(value) : "";
 }

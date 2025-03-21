@@ -201,6 +201,7 @@ const SheetsUrlSetter: React.FC<SheetsUrlSetterProps> = ({ onSync }) => {
               <li>וודא שיש עמודה עם מספרי מעקב בפורמט GWD או TM</li>
               <li>וודא שיש כתובות תקינות בגיליון</li>
               <li>וודא שיש שמות לקוחות באחת העמודות</li>
+              <li>וודא שאתה משתמש בקישור תקין לגיליון Google Sheets</li>
               <li>אם ממשיך להיכשל, בדוק את יומן השגיאות בקונסול הדפדפן (F12)</li>
             </ul>
             <div className="mt-4 p-2 bg-blue-50 border border-blue-100 rounded text-blue-800">

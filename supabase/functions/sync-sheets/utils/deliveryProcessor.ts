@@ -76,7 +76,7 @@ export async function processDeliveryRow(
     let name = getValueByField(cellValues, 'name', columnMap);
     
     // Check if name looks like a date value from Google Sheets
-    if (name.startsWith('Date(') && name.endsWith(')')) {
+    if (name && name.startsWith('Date(') && name.endsWith(')')) {
       try {
         // Extract date components
         const dateString = name.substring(5, name.length - 1);
@@ -147,8 +147,23 @@ export async function processDeliveryRow(
     }
     seenTrackingNumbers.add(trackingNumber);
     
-    // Generate a unique ID for the delivery - FIXED: Using uuidv4() correctly now
-    const id = uuidv4();
+    // Generate a unique ID for the delivery - using crypto.randomUUID()
+    let id;
+    try {
+      // Try using the built-in crypto API first
+      id = crypto.randomUUID();
+      console.log("Generated UUID using crypto.randomUUID()");
+    } catch (error) {
+      // Fallback to uuidv4 if crypto is not available
+      try {
+        id = uuidv4();
+        console.log("Generated UUID using uuidv4");
+      } catch (error2) {
+        // If all fails, generate a simple unique ID
+        id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        console.log("Generated fallback UUID:", id);
+      }
+    }
     
     // Create the delivery record
     const deliveryRecord = {

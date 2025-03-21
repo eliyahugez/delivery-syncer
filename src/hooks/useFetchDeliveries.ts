@@ -75,16 +75,74 @@ export function useFetchDeliveries(isOnline: boolean) {
           if (response.error) {
             console.error("Supabase function error:", response.error);
             
-            // Check for specific error types with Hebrew messages
-            let errorMessage = response.error.message || "שגיאה בטעינת נתוני משלוחים מהשרת";
-            
-            if (errorMessage.includes("column") && errorMessage.includes("does not exist")) {
-              errorMessage = "שגיאה במבנה הטבלה: עמודה חסרה או לא תקינה";
-            } else if (errorMessage.includes("Invalid") && errorMessage.includes("format")) {
-              errorMessage = "פורמט טבלה לא תקין. ודא שיש לך הרשאות גישה לטבלה.";
+            // If the response error indicates the server-side Error, but we have a data response,
+            // we may still have valid data with warnings or partial errors
+            if (response.data && response.data.deliveries) {
+              console.log("Response contains data despite error, proceeding with caution");
+              // Continue processing below as we have some data
+            } else {
+              // Check for specific error types with Hebrew messages
+              let errorMessage = response.error.message || "שגיאה בטעינת נתוני משלוחים מהשרת";
+              
+              if (errorMessage.includes("column") && errorMessage.includes("does not exist")) {
+                errorMessage = "שגיאה במבנה הטבלה: עמודה חסרה או לא תקינה";
+              } else if (errorMessage.includes("Invalid") && errorMessage.includes("format")) {
+                errorMessage = "פורמט טבלה לא תקין. ודא שיש לך הרשאות גישה לטבלה.";
+              } else if (errorMessage.includes("Edge Function returned a non-2xx status code")) {
+                // This particular error needs special handling
+                // Check if we can recover data from error response
+                if (response.error && response.error.response) {
+                  try {
+                    const errorData = await response.error.response.json();
+                    console.log("Error response data:", errorData);
+                    
+                    if (errorData && errorData.deliveries) {
+                      // We actually got data despite the error
+                      fetchedDeliveries = errorData.deliveries;
+                      if (errorData.statusOptions) {
+                        statusOptions = errorData.statusOptions;
+                      }
+                      
+                      // Save to cache even though there was an error
+                      localStorage.setItem(STORAGE_KEYS.DELIVERIES_CACHE, JSON.stringify(fetchedDeliveries));
+                      localStorage.setItem(STORAGE_KEYS.STATUS_OPTIONS, JSON.stringify(statusOptions));
+                      
+                      const now = new Date();
+                      localStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toISOString());
+                      
+                      // Show toast with warning about partial success
+                      toast({
+                        title: "סנכרון חלקי",
+                        description: `נטענו ${fetchedDeliveries.length} משלוחים, אבל היו גם שגיאות.`,
+                        variant: "warning",
+                      });
+                      
+                      return {
+                        deliveries: fetchedDeliveries,
+                        statusOptions,
+                        lastSyncTime: now
+                      };
+                    }
+                    
+                    // Error information from the response
+                    if (errorData && errorData.error) {
+                      errorMessage = errorData.error;
+                      
+                      // Special case for UUID errors
+                      if (errorData.failedRows && 
+                          errorData.failedRows.length > 0 && 
+                          errorData.failedRows[0].reason.includes("uuidv4 is not a function")) {
+                        errorMessage = "שגיאה בייצור מזהים במערכת. נסה שוב או פנה לתמיכה טכנית.";
+                      }
+                    }
+                  } catch (parseError) {
+                    console.error("Failed to parse error response:", parseError);
+                  }
+                }
+              }
+              
+              throw new Error(errorMessage);
             }
-            
-            throw new Error(errorMessage);
           }
           
           if (response.data?.error) {
@@ -113,7 +171,7 @@ export function useFetchDeliveries(isOnline: boolean) {
               
               toast({
                 title: "שגיאה בעיבוד נתונים",
-                description: `בעיה בעיבוד השורות: ${firstError.reason}. סך הכל ${response.data.failedRows.length} שורות נכשלו.`,
+                description: `בעיה בעיבוד השורות: ${firstError.reason.substring(0, 50)}. סך הכל ${response.data.failedRows.length} שורות נכשלו.`,
                 variant: "destructive",
               });
               

@@ -1,3 +1,4 @@
+
 // Helper function to extract sheet ID from URL - enhanced to handle more URL formats
 export function extractSheetId(url: string): string | null {
   if (!url) return null;
@@ -37,11 +38,27 @@ export function extractSheetId(url: string): string | null {
       return match4[1];
     }
     
+    // Handle full URL formats without explicit /d/ pattern
+    const regex5 = /spreadsheets\.(google|corp\.google)\.com.*[?&]id=([a-zA-Z0-9-_]+)/;
+    const match5 = url.match(regex5);
+    if (match5 && match5[2]) {
+      console.log("Extracted using full URL pattern:", match5[2]);
+      return match5[2];
+    }
+    
     // Direct ID (if the user just provided the ID)
     const directIdRegex = /^[a-zA-Z0-9-_]{25,45}$/;
     if (directIdRegex.test(url)) {
       console.log("URL appears to be a direct ID");
       return url;
+    }
+    
+    // Last attempt - try to extract anything that looks like a spreadsheet ID
+    const generalIdRegex = /([a-zA-Z0-9-_]{25,45})/;
+    const generalMatch = url.match(generalIdRegex);
+    if (generalMatch && generalMatch[1]) {
+      console.log("Extracted possible ID using general pattern:", generalMatch[1]);
+      return generalMatch[1];
     }
     
     console.log("No valid sheet ID pattern found in URL");

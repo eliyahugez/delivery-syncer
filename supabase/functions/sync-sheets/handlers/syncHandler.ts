@@ -98,6 +98,7 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
     const result = await processAndSaveData(response, supabase);
     
     if (result.error) {
+      console.error("Error processing data:", result.error);
       return {
         status: 500,
         body: result
@@ -126,7 +127,7 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
       errorDetails = 'חסרות עמודות נדרשות בטבלה או במסד הנתונים. בדוק את מבנה הטבלה.';
     } else if (error.message?.includes("uuid") || error.message?.includes("uuidv4")) {
       errorMessage = 'שגיאה בייצור מזהים';
-      errorDetails = 'בעיה בספריית UUID ביצירת מזהים. שגיאה זו טופלה, נא לנסות שוב.';
+      errorDetails = 'בעיה ביצירת מזהים ייחודיים. השגיאה תוקנה, נא לנסות שוב.';
     }
     
     // Enhanced error object to provide more details to the client
