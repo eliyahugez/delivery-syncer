@@ -5,9 +5,15 @@ import { processDeliveryRow, saveDeliveryToDatabase } from "./deliveryProcessor.
 import { fetchStatusOptionsFromSheets } from "../handlers/statusOptionsHandler.ts";
 import { getTableColumns } from "./dbDebug.ts";
 
+interface ProcessOptions {
+  forceRefresh?: boolean;
+  customColumnMappings?: Record<string, number>;
+}
+
 // Function to process Google Sheets data and save to Supabase
-export async function processAndSaveData(sheetsData: any, supabase: any) {
+export async function processAndSaveData(sheetsData: any, supabase: any, options: ProcessOptions = {}) {
   console.log("Processing sheet data...");
+  console.log("Process options:", options);
   
   // Verify database schema before starting
   const deliveriesColumns = await getTableColumns(supabase, 'deliveries');
@@ -26,9 +32,41 @@ export async function processAndSaveData(sheetsData: any, supabase: any) {
   const columns = sheetsData.table.cols.map((col: any) => col.label || "");
   console.log('Detected columns:', columns);
 
-  // Map columns to our expected fields
-  const columnMap = analyzeColumns(columns);
-  console.log('Column mapping:', columnMap);
+  // Map columns to our expected fields - use custom mappings if provided, otherwise auto-detect
+  let columnMap: Record<string, number>;
+  
+  if (options.customColumnMappings && Object.keys(options.customColumnMappings).length > 0) {
+    columnMap = options.customColumnMappings;
+    console.log('Using custom column mapping:', columnMap);
+  } else {
+    // Try to load saved mappings for this sheet
+    const spreadsheetId = extractSheetId(JSON.stringify(sheetsData)) || '';
+    let savedMappings = null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('column_mappings')
+        .select('mappings')
+        .eq('sheet_url', spreadsheetId)
+        .maybeSingle();
+        
+      if (data && data.mappings) {
+        savedMappings = data.mappings;
+        console.log('Found saved column mappings:', savedMappings);
+      }
+    } catch (error) {
+      console.warn("Error loading saved mappings:", error);
+    }
+    
+    // Use saved mappings if available, otherwise auto-detect
+    if (savedMappings && Object.keys(savedMappings).length > 0) {
+      columnMap = savedMappings;
+      console.log('Using saved column mapping:', columnMap);
+    } else {
+      columnMap = analyzeColumns(columns);
+      console.log('Auto-detected column mapping:', columnMap);
+    }
+  }
 
   const rows = sheetsData.table.rows;
   const deliveries: any[] = [];
@@ -71,10 +109,11 @@ export async function processAndSaveData(sheetsData: any, supabase: any) {
       deliveries.push(result.delivery);
       
       // Group by customer name
-      if (!customerGroups[result.delivery.name]) {
-        customerGroups[result.delivery.name] = [];
+      const customerName = result.delivery.name || 'Unknown';
+      if (!customerGroups[customerName]) {
+        customerGroups[customerName] = [];
       }
-      customerGroups[result.delivery.name].push(result.delivery);
+      customerGroups[customerName].push(result.delivery);
       
       // Save to database
       const saveResult = await saveDeliveryToDatabase(result, supabase);

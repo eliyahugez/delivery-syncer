@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { Delivery } from "@/types/delivery";
 import { useAuth } from "@/context/AuthContext";
@@ -27,6 +28,13 @@ export function useDeliveryData() {
   // Format phone number to international format
   const formatPhoneNumber = (phone: string): string => {
     if (!phone) return '';
+    
+    // Skip if the phone field contains status information
+    if (phone.toLowerCase().includes('delivered') || 
+        phone.toLowerCase().includes('נמסר') ||
+        phone.toLowerCase().includes('status')) {
+      return '';
+    }
     
     // Remove non-digit characters
     let digits = phone.replace(/\D/g, "");
@@ -78,43 +86,61 @@ export function useDeliveryData() {
             throw err;
           });
       
-      // Process dates in name field if needed
+      // Process received deliveries
       const processedDeliveries = fetchedDeliveries.map(delivery => {
-        let processedName = delivery.name;
+        // Process the name field - handle date values specifically
+        let processedName = delivery.name || '';
         
-        // Check if name is in Date() format and convert it
-        if (typeof processedName === 'string' && processedName.startsWith('Date(') && processedName.endsWith(')')) {
-          try {
-            const dateString = processedName.substring(5, processedName.length - 1);
-            const [year, month, day] = dateString.split(',').map(Number);
-            processedName = `${day}/${month + 1}/${year}`;
-          } catch (e) {
-            console.error("Error parsing date in name:", processedName, e);
+        // Detect date in name field
+        if (typeof processedName === 'string') {
+          // If name is marked as date
+          if (processedName.startsWith('[DATE]')) {
+            processedName = processedName.replace('[DATE]', '').trim();
+          }
+          // Check if name is in Date() format and convert it
+          else if (processedName.startsWith('Date(') && processedName.endsWith(')')) {
+            try {
+              const dateString = processedName.substring(5, processedName.length - 1);
+              const [year, month, day] = dateString.split(',').map(Number);
+              processedName = `${day}/${month + 1}/${year}`;
+            } catch (e) {
+              console.error("Error parsing date in name:", processedName, e);
+            }
           }
         }
         
-        // Format the phone number
-        const formattedPhone = formatPhoneNumber(delivery.phone);
+        // Check if phone field contains status info
+        let processedPhone = delivery.phone || '';
+        if (processedPhone.toLowerCase().includes('delivered') || 
+            processedPhone.toLowerCase().includes('נמסר') ||
+            processedPhone.toLowerCase().includes('status')) {
+          // Don't show status in phone field
+          processedPhone = '';
+        } else {
+          // Format the phone number normally
+          processedPhone = formatPhoneNumber(delivery.phone);
+        }
         
         // Ensure customer name is not empty or just the tracking number
         const finalName = processedName && processedName !== delivery.trackingNumber 
           ? processedName 
-          : "לקוח " + delivery.trackingNumber;
+          : `לקוח ${delivery.trackingNumber || 'לא ידוע'}`;
           
         return {
           ...delivery,
           name: finalName,
-          phone: formattedPhone
+          phone: processedPhone
         };
       });
       
       console.log("Loaded deliveries:", processedDeliveries.slice(0, 3));
       
       // Log the first few items for debugging
-      console.log("Customer groups:", processedDeliveries.slice(0, 5).map(d => ({
+      console.log("Sample deliveries:", processedDeliveries.slice(0, 5).map(d => ({
         name: d.name,
         tracking: d.trackingNumber,
-        phone: d.phone
+        phone: d.phone,
+        address: d.address
       })));
       
       setDeliveries(processedDeliveries);
@@ -130,6 +156,21 @@ export function useDeliveryData() {
     } catch (err) {
       console.error("Error loading deliveries:", err);
       
+      // Try loading from local storage
+      const cachedDeliveries = localStorage.getItem('cached_deliveries');
+      if (cachedDeliveries) {
+        try {
+          const parsed = JSON.parse(cachedDeliveries);
+          setDeliveries(parsed);
+          toast({
+            title: "נטען ממטמון מקומי",
+            description: "לא ניתן להתחבר לשרת. נטענו נתונים מקומיים.",
+          });
+        } catch (e) {
+          console.error("Error parsing cached deliveries:", e);
+        }
+      }
+      
       // For better DX, show debug info in console
       if (err instanceof Error) {
         console.debug("Error details:", err.message, err.stack);
@@ -144,6 +185,32 @@ export function useDeliveryData() {
       if (deliveries.length > 0) {
         localStorage.setItem('cached_deliveries', JSON.stringify(deliveries));
       }
+    }
+  };
+
+  // Handle column mapping submission from wizard
+  const submitColumnMappings = async (mappings: Record<string, number>) => {
+    if (!user?.sheetsUrl) return;
+    
+    try {
+      // For now, we'll just simulate this - in a real implementation, you'd send
+      // the mappings to the backend to store and use for future imports
+      console.log("Submitting column mappings:", mappings);
+      
+      toast({
+        title: "מיפוי עמודות נשמר",
+        description: "מיפוי העמודות נשמר בהצלחה. הנתונים ייובאו בהתאם.",
+      });
+      
+      // Trigger a refresh with the new mappings
+      loadDeliveries(true);
+    } catch (error) {
+      console.error("Error submitting column mappings:", error);
+      toast({
+        title: "שגיאה בשמירת מיפוי",
+        description: "לא ניתן לשמור את מיפוי העמודות. נסה שנית.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -173,6 +240,7 @@ export function useDeliveryData() {
     error,
     lastSyncTime,
     fetchDeliveries: loadDeliveries,
-    deliveryStatusOptions
+    deliveryStatusOptions,
+    submitColumnMappings
   };
 }

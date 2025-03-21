@@ -27,17 +27,6 @@ serve(async (req) => {
       );
     }
     
-    // For debugging and tracing
-    console.log("Supabase URL:", Deno.env.get("SUPABASE_URL"));
-    
-    // Check database schema
-    try {
-      await verifyDatabaseSchema(supabase);
-    } catch (dbError) {
-      console.error("Database verification error:", dbError);
-      // Continue anyway as we don't want this to block functionality
-    }
-    
     // Parse request body
     let reqBody;
     try {
@@ -49,9 +38,59 @@ serve(async (req) => {
       );
     }
     
-    const { sheetsUrl, action, deliveryId, newStatus, updateType, forceRefresh } = reqBody;
+    const { sheetsUrl, action, deliveryId, newStatus, updateType, forceRefresh, columnMappings } = reqBody;
 
-    console.log("Request body:", JSON.stringify(reqBody, null, 2));
+    console.log("Request body:", JSON.stringify({
+      action,
+      sheetsUrl: sheetsUrl ? `${sheetsUrl.substring(0, 20)}...` : undefined,
+      deliveryId, 
+      newStatus,
+      hasColumnMappings: columnMappings ? 'yes' : 'no'
+    }, null, 2));
+    
+    // For handling custom column mappings
+    if (action === "setColumnMappings" && columnMappings) {
+      console.log("Saving custom column mappings:", columnMappings);
+      
+      try {
+        const mappingId = sheetsUrl || 'default_mapping';
+        
+        const { error } = await supabase
+          .from('column_mappings')
+          .upsert(
+            {
+              sheet_url: mappingId,
+              mappings: columnMappings
+            },
+            { onConflict: 'sheet_url' }
+          );
+          
+        if (error) {
+          console.error("Error saving column mappings:", error);
+          return new Response(
+            JSON.stringify({ 
+              error: 'שגיאה בשמירת מיפוי העמודות',
+              details: error.message
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        return new Response(
+          JSON.stringify({ success: true, message: 'מיפוי העמודות נשמר בהצלחה' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error("Error processing column mappings:", error);
+        return new Response(
+          JSON.stringify({ 
+            error: 'שגיאה בעיבוד מיפוי העמודות',
+            details: error instanceof Error ? error.message : 'Unknown error'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
     
     // For status update action
     if (action === "updateStatus") {
@@ -89,8 +128,11 @@ serve(async (req) => {
       );
     }
 
-    // Pass the forceRefresh flag to the sync handler
-    const result = await handleSyncRequest(sheetsUrl, supabase);
+    // Pass the forceRefresh flag and any custom column mappings to the sync handler
+    const result = await handleSyncRequest(sheetsUrl, supabase, {
+      forceRefresh: !!forceRefresh,
+      customColumnMappings: columnMappings
+    });
     
     return new Response(
       JSON.stringify(result.body),

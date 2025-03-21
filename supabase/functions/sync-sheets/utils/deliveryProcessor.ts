@@ -1,5 +1,4 @@
-
-import { getValueByField } from "./columnUtils.ts";
+import { getValueByField, isSheetDateValue, formatSheetDate } from "./columnUtils.ts";
 import { normalizeStatus } from "./statusUtils.ts";
 import { v4 as uuidv4 } from "https://deno.land/std@0.177.0/uuid/mod.ts";
 
@@ -21,19 +20,8 @@ export async function processDeliveryRow(
       if (!cell) return '';
       
       // Handle date objects that come from Google Sheets in the format "Date(2025,2,18)"
-      if (typeof cell.v === 'string' && cell.v.startsWith('Date(') && cell.v.endsWith(')')) {
-        try {
-          // Extract date components from the string
-          const dateString = cell.v.substring(5, cell.v.length - 1);
-          const [year, month, day] = dateString.split(',').map(Number);
-          
-          // Format as DD/MM/YYYY for Israeli date format
-          // Note: month is 0-indexed in JavaScript Date
-          return `${day}/${month + 1}/${year}`;
-        } catch (e) {
-          console.error("Error parsing date value:", cell.v, e);
-          return cell.v;
-        }
+      if (typeof cell.v === 'string' && isSheetDateValue(cell.v)) {
+        return formatSheetDate(cell.v);
       }
       
       // Convert any other value to string
@@ -75,19 +63,34 @@ export async function processDeliveryRow(
     // Get customer name
     let name = getValueByField(cellValues, 'name', columnMap);
     
-    // Check if name looks like a date value from Google Sheets
-    if (name && name.startsWith('Date(') && name.endsWith(')')) {
-      try {
-        // Extract date components
-        const dateString = name.substring(5, name.length - 1);
-        const [year, month, day] = dateString.split(',').map(Number);
-        
-        // Format as DD/MM/YYYY for Israeli date format
-        name = `${day}/${month + 1}/${year}`;
-        console.log(`Converted date in name field: ${name}`);
-      } catch (e) {
-        console.error("Error parsing date in name:", name, e);
+    // ENHANCED: Check if name looks like a date value from Google Sheets
+    if (isSheetDateValue(name)) {
+      name = formatSheetDate(name);
+      console.log(`Converted date in name field to formatted date: ${name}`);
+      
+      // ENHANCEMENT: Try to find a real name elsewhere in the row
+      for (let i = 0; i < cellValues.length; i++) {
+        const value = String(cellValues[i] || '');
+        // A real name would typically have more than one word and not be a date/numeric
+        if (value && value.includes(' ') && 
+            !isSheetDateValue(value) && 
+            !/^\d+$/.test(value) &&
+            !Object.values(columnMap).includes(i) &&
+            value !== trackingNumber) {
+          name = value;
+          console.log(`Found better name value in column ${i}: ${name}`);
+          break;
+        }
       }
+    }
+    
+    // ENHANCED: If name is just a date, mark as missing
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(name)) {
+      // This is most likely a date, not an actual customer name
+      // Store the date, but mark it so the UI can identify it properly
+      const dateValue = name;
+      name = `[DATE] ${dateValue}`;
+      console.log(`Name is just a date (${dateValue}), marking as date value`);
     }
     
     // Get or infer address - prioritize concatenating address and city if available
@@ -120,6 +123,49 @@ export async function processDeliveryRow(
     
     // Format phone number to international format
     let phone = getValueByField(cellValues, 'phone', columnMap);
+    
+    // ENHANCED: Check if phone field contains status information instead
+    if (phone && (
+        phone.toLowerCase().includes('delivered') || 
+        phone.toLowerCase().includes('נמסר') || 
+        phone.toLowerCase().includes('pending') || 
+        phone.toLowerCase().includes('ממתין') ||
+        phone.toLowerCase().includes('status')
+    )) {
+      console.log(`Phone field contains status information: "${phone}"`);
+      
+      // Try to find an actual phone number in the row
+      let foundPhone = false;
+      for (let i = 0; i < cellValues.length; i++) {
+        const value = String(cellValues[i] || '');
+        // Check for phone number patterns
+        if (/^0\d{8,9}$/.test(value.replace(/[\s-]/g, '')) || 
+            /^\+972\d{8,9}$/.test(value.replace(/[\s-]/g, ''))) {
+          phone = value;
+          foundPhone = true;
+          console.log(`Found actual phone number in column ${i}: ${phone}`);
+          break;
+        }
+      }
+      
+      if (!foundPhone) {
+        // Store the original value as possible status and clear phone
+        const possibleStatus = phone;
+        phone = '';
+        
+        // Use this as status if we don't have a status yet
+        if (!getValueByField(cellValues, 'status', columnMap)) {
+          // Create a temporary status mapping to use this column
+          let tempColumnMap = {...columnMap};
+          const phoneColIndex = columnMap['phone'];
+          if (phoneColIndex !== undefined) {
+            tempColumnMap['status'] = phoneColIndex;
+            console.log(`Using phone column as status column instead`);
+          }
+        }
+      }
+    }
+    
     if (phone) {
       phone = formatPhoneNumber(phone);
     }

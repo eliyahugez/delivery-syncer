@@ -3,8 +3,14 @@ import { extractSheetId, fetchSheetsData } from "../utils/sheetUtils.ts";
 import { processAndSaveData } from "../utils/sheetsDataProcessor.ts";
 import { getTableColumns } from "../utils/dbDebug.ts";
 
-export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
+interface SyncOptions {
+  forceRefresh?: boolean;
+  customColumnMappings?: Record<string, number>;
+}
+
+export async function handleSyncRequest(sheetsUrl: string, supabase: any, options: SyncOptions = {}) {
   console.log("Processing Google Sheets URL:", sheetsUrl);
+  console.log("Sync options:", options);
 
   // First check database schema to verify connectivity
   try {
@@ -94,8 +100,11 @@ export async function handleSyncRequest(sheetsUrl: string, supabase: any) {
       };
     }
     
-    // Process the data and save to Supabase
-    const result = await processAndSaveData(response, supabase);
+    // Process the data and save to Supabase with custom column mappings if provided
+    const result = await processAndSaveData(response, supabase, {
+      forceRefresh: options.forceRefresh,
+      customColumnMappings: options.customColumnMappings
+    });
     
     if (result.error) {
       console.error("Error processing data:", result.error);
