@@ -22,11 +22,23 @@ const PhoneNumberActions = ({ phoneNumber, handleWhatsApp }: PhoneNumberActionsP
           <Phone className="h-3 w-3 text-gray-400" />
           <span className="text-sm text-gray-400 italic">מספר טלפון לא זמין</span>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mr-2 h-7 px-2 text-xs"
+          onClick={() => window.open('https://api.whatsapp.com/send', '_blank')}
+        >
+          <MessageSquare className="h-3 w-3 mr-1" />
+          פתח וואטסאפ
+        </Button>
       </div>
     );
   }
   
-  const formattedPhone = phoneNumber.replace(/\D/g, '');
+  // Remove any non-digit characters except for the leading +
+  const formattedPhone = phoneNumber.startsWith('+') 
+    ? '+' + phoneNumber.substring(1).replace(/\D/g, '')
+    : phoneNumber.replace(/\D/g, '');
   
   // פונקציה לפתיחת שיחת טלפון
   const handleCall = (e: React.MouseEvent) => {
@@ -37,7 +49,7 @@ const PhoneNumberActions = ({ phoneNumber, handleWhatsApp }: PhoneNumberActionsP
   // פונקציה לפתיחת וואטסאפ
   const handleWhatsAppClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    handleWhatsApp(phoneNumber);
+    handleWhatsApp(formattedPhone);
   };
   
   return (

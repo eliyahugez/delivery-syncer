@@ -42,7 +42,14 @@ const DeliveryGroups: React.FC<DeliveryGroupsProps> = ({
   onCompleteDelivery,
   isLoading = false,
 }) => {
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  // Initialize all groups as open by default
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initialState: Record<string, boolean> = {};
+    groups.forEach(group => {
+      initialState[group.customerName] = true; // Default all groups to open
+    });
+    return initialState;
+  });
 
   const toggleGroup = (customerName: string) => {
     setOpenGroups(prev => ({
@@ -118,17 +125,38 @@ const DeliveryGroups: React.FC<DeliveryGroupsProps> = ({
                       <div className="text-sm text-muted-foreground flex items-center gap-2">
                         <Package className="h-3 w-3" />
                         <span>{group.totalDeliveries} משלוחים</span>
-                        {group.phones[0] && !group.phones[0].toLowerCase().includes('delivered') && (
-                          <>
-                            <span>•</span>
-                            <Phone className="h-3 w-3" />
-                            <span dir="ltr">{group.phones[0]}</span>
-                          </>
-                        )}
                       </div>
                     </div>
                   </div>
-                  <DeliveryStatusBadge status={group.latestStatus} />
+                  <div className="flex gap-2 items-center">
+                    {group.phones[0] && !group.phones[0].toLowerCase().includes('delivered') && (
+                      <div className="flex space-x-1 rtl:space-x-reverse">
+                        <Button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleWhatsApp(group.phones[0]);
+                          }}
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 px-2 text-xs bg-green-100 text-green-700 border-green-200 hover:bg-green-200"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`tel:${group.phones[0]}`, '_blank');
+                          }}
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 px-2 text-xs bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
+                        >
+                          <Phone className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    <DeliveryStatusBadge status={group.latestStatus} />
+                  </div>
                 </div>
               </CollapsibleTrigger>
               

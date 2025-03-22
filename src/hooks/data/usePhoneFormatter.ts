@@ -17,6 +17,11 @@ export function usePhoneFormatter() {
     
     // Validate the phone number - must have at least 9 digits to be valid
     if (cleanedPhone.length < 9) {
+      // If it doesn't look like a phone number, but it has at least some digits,
+      // format them anyway as it might be partial information
+      if (cleanedPhone.length > 0) {
+        return cleanedPhone;
+      }
       return '';
     }
     
@@ -32,8 +37,13 @@ export function usePhoneFormatter() {
       return `+972${cleanedPhone}`;
     }
     
+    // Check if it might be an international number already
+    if (cleanedPhone.length > 10) {
+      return `+${cleanedPhone}`;
+    }
+    
     // Otherwise, return as is if it has enough digits
-    return cleanedPhone.length >= 9 ? phone : '';
+    return cleanedPhone.length >= 9 ? phone : cleanedPhone;
   };
   
   return { formatPhoneNumber };
