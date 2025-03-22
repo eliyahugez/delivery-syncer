@@ -12,6 +12,7 @@ import { useLocationTracking } from "@/hooks/useLocationTracking";
 import DeliveryCompletionDialog from "@/components/deliveries/modals/DeliveryCompletionDialog";
 import DeliveryArchiveManager from "@/components/settings/DeliveryArchiveManager";
 import { useToast } from "@/components/ui/use-toast";
+import { Delivery } from "@/types/delivery";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -126,6 +127,12 @@ const Dashboard = () => {
     });
   };
 
+  // Convert deliveryGroups to the expected format for DeliveryGroups component
+  const groupsRecord: Record<string, Delivery[]> = {};
+  deliveryGroups.forEach(group => {
+    groupsRecord[group.customerName] = group.deliveries;
+  });
+
   // Show the SheetsUrlSetter if no sheets URL is provided
   if (!user?.sheetsUrl) {
     return (
@@ -184,7 +191,7 @@ const Dashboard = () => {
           />
         ) : (
           <DeliveryGroups
-            groups={deliveryGroups}
+            groups={groupsRecord}
             statusOptions={deliveryStatusOptions}
             onUpdateStatus={handleUpdateStatus}
             onCompleteDelivery={handleDeliveryCompletion}

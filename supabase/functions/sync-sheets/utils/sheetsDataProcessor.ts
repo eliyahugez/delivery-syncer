@@ -1,7 +1,7 @@
 
-import { v4 as uuidv4 } from 'uuid';
-import { columnUtils } from './columnUtils';
-import { statusUtils } from './statusUtils';
+import { v4 as uuidv4 } from "https://deno.land/std@0.110.0/uuid/mod.ts";
+import { columnUtils } from './columnUtils.ts';
+import { statusUtils } from './statusUtils.ts';
 
 // Process and save the data from the Google Sheet
 export const processAndSaveData = async (rawData, spreadsheetId) => {

@@ -45,6 +45,9 @@ export async function openNavigation(address: string) {
   }
 }
 
+// Add the missing navigateToAddress function as an alias to openNavigation for backward compatibility
+export const navigateToAddress = openNavigation;
+
 export function openWhatsApp(phone: string, message: string = 'היי זה שליח מחברת המשלוחים, אני בדרך אליך עם החבילה שלך.') {
   if (!phone) return;
   
