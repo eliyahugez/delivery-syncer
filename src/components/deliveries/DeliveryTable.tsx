@@ -7,6 +7,7 @@ import DeliveryTableContainer from './table/DeliveryTableContainer';
 interface DeliveryTableProps {
   deliveries: Delivery[];
   onUpdateStatus: (id: string, newStatus: string, updateType?: string) => void;
+  onCompleteDelivery: (id: string, deliveryInfo: any) => void;
   isLoading: boolean;
   sheetsUrl?: string;
   statusOptions: DeliveryStatusOption[];

@@ -22,6 +22,7 @@ interface DeliveryTableRowProps {
   handleWhatsApp: (phone: string) => void;
   handleNavigation: (address: string) => void;
   onUpdateStatus: (id: string, newStatus: string, updateType?: string) => void;
+  onCompleteDelivery?: (id: string, deliveryInfo: any) => void;
   statusOptions: DeliveryStatusOption[];
 }
 
@@ -33,6 +34,7 @@ const DeliveryTableRow = ({
   handleWhatsApp,
   handleNavigation,
   onUpdateStatus,
+  onCompleteDelivery,
   statusOptions
 }: DeliveryTableRowProps) => {
   const hasMultipleDeliveries = customerDeliveries.length > 1;
@@ -141,12 +143,14 @@ const DeliveryTableRow = ({
       }
       
       {/* מציג את פעולות המובייל אם נבחר */}
-      {showMobileActions && isMobile && (
+      {showMobileActions && isMobile && onCompleteDelivery && (
         <MobileActionButtons
           phone={phoneNumber}
           address={delivery.address}
           deliveryId={delivery.id}
           currentStatus={delivery.status}
+          customerName={displayName}
+          trackingNumber={delivery.trackingNumber}
           onCall={makePhoneCall}
           onWhatsApp={openWhatsApp}
           onNavigate={handleNavigation}
@@ -155,6 +159,7 @@ const DeliveryTableRow = ({
             status,
             hasMultipleDeliveries ? "batch" : "single"
           )}
+          onComplete={onCompleteDelivery}
           statusOptions={statusOptions}
         />
       )}

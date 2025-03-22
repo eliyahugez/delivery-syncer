@@ -15,7 +15,7 @@ interface MobileActionButtonsProps {
   onCall: (phone: string) => void;
   onWhatsApp: (phone: string) => void;
   onNavigate: (address: string) => void;
-  onUpdateStatus: (id: string, status: string) => void;
+  onUpdateStatus: (id: string, status: string, updateType?: string) => void;
   onComplete: (id: string, deliveryInfo: any) => void;
   statusOptions: DeliveryStatusOption[];
 }

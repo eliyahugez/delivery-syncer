@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   Card,
@@ -32,6 +31,7 @@ interface DeliveryGroupsProps {
   groups: DeliveryGroup[];
   statusOptions: { value: string; label: string }[];
   onUpdateStatus: (id: string, status: string, updateType: string) => void;
+  onCompleteDelivery: (id: string, deliveryInfo: any) => void;
   isLoading?: boolean;
 }
 
@@ -39,6 +39,7 @@ const DeliveryGroups: React.FC<DeliveryGroupsProps> = ({
   groups,
   statusOptions,
   onUpdateStatus,
+  onCompleteDelivery,
   isLoading = false,
 }) => {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -141,7 +142,7 @@ const DeliveryGroups: React.FC<DeliveryGroupsProps> = ({
                       </h4>
                       <div className="text-sm space-y-1">
                         <div><strong>שם: </strong>{displayName}</div>
-                        <div><strong>טלפון: </strong>
+                        <div><strong>טלפון: </strong> 
                           {group.phones.filter(phone => !phone.toLowerCase().includes('delivered') && !phone.toLowerCase().includes('נמסר')).map((phone, idx, validPhones) => (
                             <span key={idx}>
                               <a 

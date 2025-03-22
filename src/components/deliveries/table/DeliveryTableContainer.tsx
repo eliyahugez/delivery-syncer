@@ -9,13 +9,16 @@ import { useDeliveryTableHelpers } from '@/hooks/useDeliveryTableHelpers';
 interface DeliveryTableContainerProps {
   deliveries: Delivery[];
   onUpdateStatus: (id: string, newStatus: string, updateType?: string) => void;
+  onCompleteDelivery: (id: string, deliveryInfo: any) => void;
   isLoading: boolean;
   statusOptions: DeliveryStatusOption[];
+  sheetsUrl?: string;
 }
 
 const DeliveryTableContainer = ({
   deliveries,
   onUpdateStatus,
+  onCompleteDelivery,
   isLoading,
   statusOptions,
 }: DeliveryTableContainerProps) => {
@@ -66,6 +69,7 @@ const DeliveryTableContainer = ({
               handleWhatsApp={handleWhatsApp}
               handleNavigation={handleNavigation}
               onUpdateStatus={onUpdateStatus}
+              onCompleteDelivery={onCompleteDelivery}
               statusOptions={statusOptions}
             />
           ))}
