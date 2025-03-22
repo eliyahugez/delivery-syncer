@@ -15,6 +15,11 @@ export function usePhoneFormatter() {
     // Clean the phone number first, removing any non-digit characters
     const cleanedPhone = cleanPhoneNumber(phone);
     
+    // Validate the phone number - must have at least 9 digits to be valid
+    if (cleanedPhone.length < 9) {
+      return '';
+    }
+    
     // Format to international format (+972)
     if (cleanedPhone.startsWith("972")) {
       return `+${cleanedPhone}`;
@@ -27,8 +32,8 @@ export function usePhoneFormatter() {
       return `+972${cleanedPhone}`;
     }
     
-    // Otherwise, return as is
-    return phone;
+    // Otherwise, return as is if it has enough digits
+    return cleanedPhone.length >= 9 ? phone : '';
   };
   
   return { formatPhoneNumber };

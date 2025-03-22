@@ -12,7 +12,19 @@ interface PhoneNumberActionsProps {
 const PhoneNumberActions = ({ phoneNumber, handleWhatsApp }: PhoneNumberActionsProps) => {
   const isMobile = useIsMobile();
   
-  if (!phoneNumber) return null;
+  // Check if phone number is valid - must not be empty and have digits
+  const isValidPhone = phoneNumber && /\d/.test(phoneNumber);
+  
+  if (!isValidPhone) {
+    return (
+      <div className="flex items-center mt-1">
+        <div className="flex items-center gap-1">
+          <Phone className="h-3 w-3 text-gray-400" />
+          <span className="text-sm text-gray-400 italic">מספר טלפון לא זמין</span>
+        </div>
+      </div>
+    );
+  }
   
   const formattedPhone = phoneNumber.replace(/\D/g, '');
   
@@ -64,7 +76,7 @@ const PhoneNumberActions = ({ phoneNumber, handleWhatsApp }: PhoneNumberActionsP
               onClick={handleWhatsAppClick}
               variant="outline" 
               size="sm" 
-              className="h-7 px-2 text-xs"
+              className="h-7 px-2 text-xs bg-green-50 hover:bg-green-100"
             >
               <MessageSquare className="h-3 w-3 mr-1" />
               וואטסאפ
@@ -73,7 +85,7 @@ const PhoneNumberActions = ({ phoneNumber, handleWhatsApp }: PhoneNumberActionsP
               onClick={handleCall}
               variant="outline" 
               size="sm" 
-              className="h-7 px-2 text-xs"
+              className="h-7 px-2 text-xs bg-blue-50 hover:bg-blue-100"
             >
               <Phone className="h-3 w-3 mr-1" />
               חייג

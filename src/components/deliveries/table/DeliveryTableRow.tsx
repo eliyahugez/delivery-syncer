@@ -53,6 +53,9 @@ const DeliveryTableRow = ({
                       !delivery.phone.toLowerCase().includes('נמסר') &&
                       !delivery.phone.toLowerCase().includes('status') 
                       ? delivery.phone : '';
+  
+  // Don't display empty phone numbers
+  const hasValidPhone = phoneNumber && phoneNumber.length > 9;
 
   // טיפול בלחיצה על השורה - אם במובייל, מציג את הפעולות המהירות
   const handleRowClick = () => {
@@ -93,12 +96,10 @@ const DeliveryTableRow = ({
               {displayName}
             </div>
             
-            {phoneNumber && (
-              <PhoneNumberActions 
-                phoneNumber={phoneNumber} 
-                handleWhatsApp={handleWhatsApp} 
-              />
-            )}
+            <PhoneNumberActions 
+              phoneNumber={phoneNumber} 
+              handleWhatsApp={handleWhatsApp} 
+            />
             
             <AddressDisplay 
               address={delivery.address} 

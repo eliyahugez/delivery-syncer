@@ -10,34 +10,43 @@ export function useDeliveryProcessor() {
   const cityNames = [
     "Karnei Shomron", "Karney Shomron", "Karnie Shomron", "Karni Shomron",
     "קרני שומרון", "Ginot Shomron", "גינות שומרון", "Maale Shomron", "מעלה שומרון",
-    "Kedumim", "קדומים", "Ariel", "אריאל", "Emanuel", "עמנואל"
+    "Kedumim", "קדומים", "Ariel", "אריאל", "Emanuel", "עמנואל", "D. N. Lev Hashomron",
+    "לב השומרון", "Lev Hashomron", "D.N"
   ];
   
-  // Process the name field - handle date values specifically
+  // Process the name field - handle date values and special cases
   const processName = (name: string | undefined, trackingNumber: string | undefined): string => {
     if (!name) return `לקוח ${trackingNumber || 'לא ידוע'}`;
     
-    let processedName = name;
+    let processedName = name.trim();
     
     // If name is marked as date
     if (processedName.startsWith('[DATE]')) {
-      processedName = processedName.replace('[DATE]', '').trim();
+      return `לקוח משלוח ${trackingNumber || ''}`;
     }
-    // Check if name is in Date() format and convert it
+    // Check if name is in Date() format and convert to a customer name
     else if (processedName.startsWith('Date(') && processedName.endsWith(')')) {
-      try {
-        const dateString = processedName.substring(5, processedName.length - 1);
-        const [year, month, day] = dateString.split(',').map(Number);
-        processedName = `${day}/${month + 1}/${year}`;
-      } catch (e) {
-        console.error("Error parsing date in name:", processedName, e);
-      }
+      return `לקוח משלוח ${trackingNumber || ''}`;
+    }
+    // If name is just a city name, add a prefix
+    else if (cityNames.some(city => processedName.toLowerCase() === city.toLowerCase())) {
+      return `לקוח ב${processedName}`;
+    }
+    // Check if name is just "AUTO-" with a number
+    else if (processedName.startsWith('לקוח AUTO-')) {
+      const autoNumber = processedName.replace('לקוח AUTO-', '');
+      return `לקוח משלוח ${trackingNumber || autoNumber}`;
     }
     
     // Clean the name to remove or replace city names
     processedName = cleanCustomerName(processedName, cityNames);
     
-    return processedName || `לקוח ${trackingNumber || 'לא ידוע'}`;
+    // If after cleaning, the name is too short or empty, use a fallback
+    if (!processedName || processedName.length < 3) {
+      return `לקוח ${trackingNumber || 'לא ידוע'}`;
+    }
+    
+    return processedName;
   };
   
   // Process a delivery
@@ -48,17 +57,19 @@ export function useDeliveryProcessor() {
     // Process address - clean it
     const processedAddress = cleanAddress(delivery.address || '');
     
-    // Process phone
-    let processedPhone = delivery.phone || '';
-    if (processedPhone.toLowerCase().includes('delivered') || 
-        processedPhone.toLowerCase().includes('נמסר') ||
-        processedPhone.toLowerCase().includes('status')) {
-      // Don't show status in phone field
-      processedPhone = '';
-    } else {
-      // Clean the phone number first, then format it
-      processedPhone = cleanPhoneNumber(processedPhone);
-      processedPhone = formatPhoneNumber(processedPhone);
+    // Process phone - special handling for invalid phone numbers
+    let processedPhone = '';
+    if (delivery.phone) {
+      // Skip status info in phone field
+      if (delivery.phone.toLowerCase().includes('delivered') || 
+          delivery.phone.toLowerCase().includes('נמסר') ||
+          delivery.phone.toLowerCase().includes('status')) {
+        processedPhone = '';
+      } else {
+        // Clean the phone number first, then format it
+        const cleanedPhone = cleanPhoneNumber(delivery.phone);
+        processedPhone = formatPhoneNumber(cleanedPhone);
+      }
     }
     
     return {

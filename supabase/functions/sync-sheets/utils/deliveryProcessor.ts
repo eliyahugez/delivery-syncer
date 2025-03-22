@@ -1,4 +1,3 @@
-
 import { getValueByField, isSheetDateValue, formatSheetDate } from "./columnUtils.ts";
 import { normalizeStatus } from "./statusUtils.ts";
 import { v4 as uuidv4 } from "https://deno.land/std@0.177.0/uuid/mod.ts";
@@ -88,7 +87,8 @@ export async function processDeliveryRow(
     // Common city names that could appear in the name field
     const cityNames = [
       "Karnei Shomron", "Karney Shomron", "Karnie Shomron", "Karni Shomron",
-      "קרני שומרון", "Ginot Shomron", "גינות שומרון", "Maale Shomron", "מעלה שומרון"
+      "קרני שומרון", "Ginot Shomron", "גינות שומרון", "Maale Shomron", "מעלה שומרון",
+      "Kedumim", "קדומים", "Ariel", "אריאל", "Emanuel", "עמנואל", "D. N. Lev Hashomron"
     ];
     
     // Check if name is just a city
@@ -109,8 +109,9 @@ export async function processDeliveryRow(
     
     // ENHANCED: Check if name looks like a date value from Google Sheets
     if (isSheetDateValue(name)) {
-      name = formatSheetDate(name);
-      console.log(`Converted date in name field to formatted date: ${name}`);
+      const formattedDate = formatSheetDate(name);
+      console.log(`Converted date in name field to formatted date: ${formattedDate}`);
+      name = `לקוח משלוח ${trackingNumber}`;
       
       // ENHANCEMENT: Try to find a real name elsewhere in the row
       for (let i = 0; i < cellValues.length; i++) {
@@ -128,13 +129,10 @@ export async function processDeliveryRow(
       }
     }
     
-    // ENHANCED: If name is just a date, mark as missing
+    // ENHANCED: If name is just a date, use a general customer label
     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(name)) {
-      // This is most likely a date, not an actual customer name
-      // Store the date, but mark it so the UI can identify it properly
-      const dateValue = name;
-      name = `[DATE] ${dateValue}`;
-      console.log(`Name is just a date (${dateValue}), marking as date value`);
+      name = `לקוח משלוח ${trackingNumber}`;
+      console.log(`Name is just a date, replacing with generic customer name`);
     }
     
     // Get or infer address - prioritize concatenating address and city if available
@@ -216,9 +214,16 @@ export async function processDeliveryRow(
     }
     
     if (phone) {
-      // Clean the phone number
+      // Clean the phone number - this needs to be more aggressive
       phone = cleanPhoneNumber(phone);
-      phone = formatPhoneNumber(phone);
+      
+      // Only format if it has enough digits to be a valid phone number
+      if (phone.length >= 9) {
+        phone = formatPhoneNumber(phone);
+      } else {
+        console.log(`Phone number too short or invalid: "${phone}"`);
+        phone = '';  // Clear invalid phone numbers
+      }
     }
     
     // Get status or default to "pending"
