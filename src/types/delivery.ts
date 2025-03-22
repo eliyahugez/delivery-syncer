@@ -9,6 +9,7 @@ export interface Delivery {
   phone: string;
   address: string;
   assignedTo: string; // שדה שמציין את השליח המטפל במשלוח
+  externalId?: string; // Adding the missing externalId property
   
   // Fields for analytics and tracking
   deliveryNotes?: string;
