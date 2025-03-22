@@ -1,3 +1,4 @@
+
 import { cleanPhoneNumber } from '@/utils/textCleaners';
 
 export function usePhoneFormatter() {
@@ -46,5 +47,20 @@ export function usePhoneFormatter() {
     return cleanedPhone.length >= 9 ? phone : cleanedPhone;
   };
   
-  return { formatPhoneNumber };
+  // New method to check if a phone number is valid for calling/WhatsApp
+  const isValidPhoneForActions = (phone: string): boolean => {
+    if (!phone) return false;
+    
+    // Skip if the phone field contains status information
+    if (phone.toLowerCase().includes('delivered') || 
+        phone.toLowerCase().includes('נמסר') ||
+        phone.toLowerCase().includes('status')) {
+      return false;
+    }
+    
+    const cleanedPhone = cleanPhoneNumber(phone);
+    return cleanedPhone.length >= 9;
+  };
+  
+  return { formatPhoneNumber, isValidPhoneForActions };
 }

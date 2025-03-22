@@ -13,6 +13,7 @@ import ExpandedDeliveryRow from './ExpandedDeliveryRow';
 import { useIsMobile } from '@/hooks/use-mobile';
 import MobileActionButtons from '../mobile/MobileActionButtons';
 import { makePhoneCall, openWhatsApp } from '@/utils/navigation';
+import { usePhoneFormatter } from '@/hooks/data/usePhoneFormatter';
 
 interface DeliveryTableRowProps {
   customerName: string;
@@ -42,6 +43,7 @@ const DeliveryTableRow = ({
   const isMobile = useIsMobile();
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [isAutoExpanded, setIsAutoExpanded] = useState(true);
+  const { isValidPhoneForActions } = usePhoneFormatter();
   
   // Get a clean display name (removing AUTO- prefix if present)
   let displayName = customerName.startsWith("לקוח AUTO-") 
@@ -72,8 +74,8 @@ const DeliveryTableRow = ({
     phoneNumber = "+972587393495";
   }
   
-  // Don't display empty phone numbers
-  const hasValidPhone = phoneNumber && phoneNumber.length > 9;
+  // Check if the phone number is valid
+  const hasValidPhone = isValidPhoneForActions(phoneNumber);
 
   useEffect(() => {
     // Auto expand all rows by default
@@ -100,6 +102,32 @@ const DeliveryTableRow = ({
       >
         <TableCell className="p-2">
           <div className="flex space-x-1 rtl:space-x-reverse">
+            {hasValidPhone && (
+              <div className="flex space-x-1 rtl:space-x-reverse">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 bg-green-50 hover:bg-green-100 text-green-600"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleWhatsApp(phoneNumber);
+                  }}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 bg-blue-50 hover:bg-blue-100 text-blue-600"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    makePhoneCall(phoneNumber);
+                  }}
+                >
+                  <Phone className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             {hasMultipleDeliveries && (
               <Button 
                 variant="ghost" 
