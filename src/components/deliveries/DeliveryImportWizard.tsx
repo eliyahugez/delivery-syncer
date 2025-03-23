@@ -14,16 +14,20 @@ import { extractSheetId } from '@/utils/sheetUrlUtils';
 interface DeliveryImportWizardProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportComplete: (importedData: any[]) => void;
+  onImportComplete?: (importedData: any[]) => void;
+  sheetsUrl?: string;
+  onSubmit?: (mappings: Record<string, number>) => void;
 }
 
 const DeliveryImportWizard: React.FC<DeliveryImportWizardProps> = ({
   isOpen,
   onClose,
-  onImportComplete
+  onImportComplete,
+  sheetsUrl: initialSheetsUrl,
+  onSubmit
 }) => {
   const { toast } = useToast();
-  const [sheetsUrl, setSheetsUrl] = useState("");
+  const [sheetsUrl, setSheetsUrl] = useState(initialSheetsUrl || "");
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,6 +43,13 @@ const DeliveryImportWizard: React.FC<DeliveryImportWizardProps> = ({
       setSheetId(null);
     }
   }, [sheetsUrl]);
+  
+  // If initialSheetsUrl is provided, auto-advance to preview step
+  useEffect(() => {
+    if (initialSheetsUrl && step === 1) {
+      fetchPreview();
+    }
+  }, [initialSheetsUrl]);
   
   const fetchPreview = async () => {
     if (!sheetId) {
@@ -109,7 +120,14 @@ const DeliveryImportWizard: React.FC<DeliveryImportWizardProps> = ({
         description: `יובאו ${response.data.deliveries.length} משלוחים`,
       });
       
-      onImportComplete(response.data.deliveries);
+      if (onSubmit && response.data.columnMappings) {
+        onSubmit(response.data.columnMappings);
+      }
+      
+      if (onImportComplete) {
+        onImportComplete(response.data.deliveries);
+      }
+      
       onClose();
     } catch (err) {
       console.error("Error importing deliveries:", err);

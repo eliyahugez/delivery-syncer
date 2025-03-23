@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useDeliveries } from "@/hooks/useDeliveries";
 import { useAuth } from "@/context/AuthContext";
@@ -155,9 +154,11 @@ const Dashboard = () => {
   };
 
   const groupsRecord: Record<string, Delivery[]> = {};
-  deliveryGroups.forEach(group => {
-    groupsRecord[group.customerName] = group.deliveries;
-  });
+  if (deliveryGroups.deliveryGroups) {
+    deliveryGroups.deliveryGroups.forEach(group => {
+      groupsRecord[group.customerName] = group.deliveries;
+    });
+  }
 
   if (!user?.sheetsUrl) {
     return (
