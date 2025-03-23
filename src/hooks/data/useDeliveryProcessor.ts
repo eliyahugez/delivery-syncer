@@ -23,16 +23,22 @@ export function useDeliveryProcessor() {
       return "Anna Lenchus";
     }
     
-    // Check edge function logs for any customer names 
-    // This is a fallback for when the name doesn't make it to the delivery object
-    if (address && address.includes("-")) {
-      const parts = address.split("-");
-      if (parts.length === 2) {
-        // Try to find if the first part is a city name or if second part looks like a name
-        if (cityNames.some(city => parts[0].includes(city))) {
-          return parts[1].trim();
+    // Check if the name is actually just a street address
+    if (name && /^\d+\s+[A-Za-z\u0590-\u05FF]/.test(name)) {
+      // This looks like a street address (starts with a number)
+      return `לקוח ב${name}`;
+    }
+    
+    // If the name contains the city name, it's likely an address not a name
+    if (name && cityNames.some(city => name.includes(city))) {
+      // Try to extract a more meaningful name
+      if (address && address.includes('-')) {
+        const parts = address.split('-');
+        if (parts.length === 2 && !cityNames.some(city => parts[1].includes(city))) {
+          return `לקוח ${parts[1].trim()}`;
         }
       }
+      return `לקוח ב${name}`;
     }
     
     // Return best name we have or a default

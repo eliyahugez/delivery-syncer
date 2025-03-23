@@ -13,6 +13,9 @@ import DeliveryCompletionDialog from "@/components/deliveries/modals/DeliveryCom
 import DeliveryArchiveManager from "@/components/settings/DeliveryArchiveManager";
 import { useToast } from "@/components/ui/use-toast";
 import { Delivery } from "@/types/delivery";
+import { Button } from "@/components/ui/button";
+import { RefreshCw, Trash2, Upload } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -28,12 +31,14 @@ const Dashboard = () => {
     pendingUpdates,
     syncPendingUpdates,
     deliveryStatusOptions,
-    deliveryGroups
+    deliveryGroups,
+    clearDeliveries
   } = useDeliveries();
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "groups">("groups"); // Default to groups view
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<{
     id: string;
@@ -126,6 +131,24 @@ const Dashboard = () => {
       description: `פונקציה זו תיושם בגרסה הבאה. נבחר: ${courierName}, תאריך: ${deliveryDate}`,
     });
   };
+  
+  const handleClearDeliveries = () => {
+    try {
+      clearDeliveries();
+      toast({
+        title: "נתונים נמחקו",
+        description: "כל המשלוחים נמחקו מהמערכת המקומית",
+        variant: "default"
+      });
+      setShowClearConfirm(false);
+    } catch (error) {
+      toast({
+        title: "שגיאה במחיקת נתונים",
+        description: "אירעה שגיאה במחיקת המשלוחים",
+        variant: "destructive"
+      });
+    }
+  };
 
   // Convert deliveryGroups to the expected format for DeliveryGroups component
   const groupsRecord: Record<string, Delivery[]> = {};
@@ -175,8 +198,56 @@ const Dashboard = () => {
 
       <ErrorDisplay error={error} handleSync={handleSync} />
       
-      <div className="mb-2">
+      <div className="mb-4 flex justify-between items-center">
         <DeliveryArchiveManager onArchive={handleArchive} />
+        
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-green-600 border-green-200 hover:bg-green-50"
+            onClick={() => setShowImportModal(true)}
+          >
+            <Upload className="h-4 w-4 mr-1" />
+            ייבוא משלוחים
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+            onClick={handleSync}
+            disabled={isSyncing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${isSyncing ? 'animate-spin' : ''}`} />
+            סנכרון
+          </Button>
+          
+          <Dialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-red-600 border-red-200 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                ניקוי נתונים
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>ניקוי משלוחים</DialogTitle>
+                <DialogDescription>
+                  האם אתה בטוח שברצונך למחוק את כל המשלוחים? פעולה זו לא ניתנת לביטול.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={() => setShowClearConfirm(false)}>ביטול</Button>
+                <Button variant="destructive" onClick={handleClearDeliveries}>מחק משלוחים</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <main className="pb-16"> {/* Add padding at the bottom for mobile action buttons */}

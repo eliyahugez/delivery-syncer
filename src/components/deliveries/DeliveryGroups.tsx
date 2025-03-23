@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronRight, Package, Phone, MessageSquare, Navigation } from 'lucide-react';
+import { ChevronRight, Package, Phone, MessageSquare, Navigation, Trash2, RefreshCw } from 'lucide-react';
 import DeliveryStatusBadge from './DeliveryStatusBadge';
 import { Delivery } from '@/types/delivery';
 import { DeliveryStatusOption } from '@/hooks/useDeliveries';
@@ -60,16 +60,19 @@ const DeliveryGroups = ({
   };
 
   const getGroupDisplayName = (groupName: string) => {
-    // Extract better name from address if the group is named like "1 Hashikma"
+    // Don't display street numbers as group names
     if (/^\d+\s+[a-zA-Z\u0590-\u05FF]/.test(groupName)) {
-      return groupName;
+      return `לקוח ב${groupName}`;
     }
     
     // If groupName is like "Street name-house number" (e.g. "Karni Shomron-Karni Shomron")
     if (groupName.includes('-')) {
       const parts = groupName.split('-');
       if (parts.length === 2) {
-        return parts[1] || groupName;
+        // If second part is not empty and not a city name, use it
+        if (parts[1] && !parts[1].includes("Shomron") && !parts[1].includes("שומרון")) {
+          return parts[1].trim();
+        }
       }
     }
     
@@ -94,6 +97,12 @@ const DeliveryGroups = ({
                       {deliveries.length} משלוחים
                     </span>
                   </div>
+                  
+                  <PhoneNumberActions
+                    phoneNumber={primaryDelivery.phone}
+                    showButtons={false}
+                  />
+                  
                   <AddressDisplay 
                     address={primaryDelivery.address} 
                     handleNavigation={(address) => navigateToAddress(address)}
@@ -149,7 +158,7 @@ const DeliveryGroups = ({
                       });
                     }}
                   >
-                    ממתין
+                    מסירה
                   </Button>
                   <ChevronRight className={`h-6 w-6 transition-transform ${expandedGroup === groupName ? 'rotate-90' : ''}`} />
                 </div>
