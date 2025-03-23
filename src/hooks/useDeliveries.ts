@@ -1,10 +1,11 @@
+
 import { useDeliveryData } from "./useDeliveryData";
 import { useDeliveryStatusUpdates } from "./useDeliveryStatusUpdates";
 import { useOfflineMode } from './useOfflineMode';
 import { useDeliveryGroups } from './useDeliveryGroups';
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
-import { STORAGE_KEYS } from "@/utils/localStorage";
+import { STORAGE_KEYS, removeFromStorage } from "@/utils/localStorage";
 
 export interface DeliveryStatusOption {
   value: string;
@@ -24,7 +25,7 @@ export function useDeliveries() {
     deliveryStatusOptions
   } = useDeliveryData();
 
-  const { isOnline, pendingUpdates } = useOfflineMode();
+  const { isOnline, pendingUpdates, clearAllOfflineChanges } = useOfflineMode();
   
   const {
     updateStatus,
@@ -64,10 +65,13 @@ export function useDeliveries() {
       setDeliveries([]);
       
       // Clear localStorage cache
-      localStorage.removeItem('cached_deliveries');
-      localStorage.removeItem(STORAGE_KEYS.DELIVERIES_CACHE);
+      removeFromStorage('cached_deliveries');
+      removeFromStorage(STORAGE_KEYS.DELIVERIES_CACHE);
       
-      console.log("All deliveries cleared");
+      // Also clear pending updates to avoid the inconsistency
+      clearAllOfflineChanges();
+      
+      console.log("All deliveries and pending updates cleared");
       
       return true;
     } catch (error) {

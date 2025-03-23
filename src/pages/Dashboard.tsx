@@ -1,5 +1,4 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useDeliveries } from "@/hooks/useDeliveries";
 import { useAuth } from "@/context/AuthContext";
 import DeliveryTable from "@/components/deliveries/DeliveryTable";
@@ -36,7 +35,7 @@ const Dashboard = () => {
   } = useDeliveries();
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [viewMode, setViewMode] = useState<"table" | "groups">("groups"); // Default to groups view
+  const [viewMode, setViewMode] = useState<"table" | "groups">("groups");
   const [showImportModal, setShowImportModal] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
@@ -53,10 +52,16 @@ const Dashboard = () => {
     toggleNearbyDeliveries 
   } = useLocationTracking();
 
+  useEffect(() => {
+    if (pendingUpdates > 0 && deliveries.length === 0 && !isLoading) {
+      fetchDeliveries(true);
+    }
+  }, [pendingUpdates, deliveries.length, isLoading, fetchDeliveries]);
+
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      await fetchDeliveries(true); // Force refresh
+      await fetchDeliveries(true);
     } finally {
       setIsSyncing(false);
     }
@@ -91,7 +96,6 @@ const Dashboard = () => {
   const handleCompleteDelivery = async (recipientName: string) => {
     if (!selectedDelivery) return;
     
-    // Find the "delivered" status option
     const deliveredOption = deliveryStatusOptions.find(option => 
       option.value.toLowerCase().includes('delivered') || 
       option.value.includes('נמסר')
@@ -119,13 +123,11 @@ const Dashboard = () => {
     console.log("Import completed:", importedData.length, "items");
     console.log("Column mappings:", mappings);
     
-    // Refresh data after import
     fetchDeliveries();
     setShowImportModal(false);
   };
   
   const handleArchive = (courierName: string, deliveryDate: string) => {
-    // This would be implemented with a backend call to archive deliveries
     toast({
       title: "פונקציית ארכיון",
       description: `פונקציה זו תיושם בגרסה הבאה. נבחר: ${courierName}, תאריך: ${deliveryDate}`,
@@ -137,7 +139,7 @@ const Dashboard = () => {
       clearDeliveries();
       toast({
         title: "נתונים נמחקו",
-        description: "כל המשלוחים נמחקו מהמערכת המקומית",
+        description: "כל המשלוחים והעדכונים הממתינים נמחקו מהמערכת המקומית",
         variant: "default"
       });
       setShowClearConfirm(false);
@@ -150,13 +152,11 @@ const Dashboard = () => {
     }
   };
 
-  // Convert deliveryGroups to the expected format for DeliveryGroups component
   const groupsRecord: Record<string, Delivery[]> = {};
   deliveryGroups.forEach(group => {
     groupsRecord[group.customerName] = group.deliveries;
   });
 
-  // Show the SheetsUrlSetter if no sheets URL is provided
   if (!user?.sheetsUrl) {
     return (
       <div className="container mx-auto px-4 py-6">
@@ -238,7 +238,7 @@ const Dashboard = () => {
               <DialogHeader>
                 <DialogTitle>ניקוי משלוחים</DialogTitle>
                 <DialogDescription>
-                  האם אתה בטוח שברצונך למחוק את כל המשלוחים? פעולה זו לא ניתנת לביטול.
+                  האם אתה בטוח שברצונך למחוק את כל המשלוחים והעדכונים הממתינים? פעולה זו לא ניתנת לביטול.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex justify-end gap-2 mt-4">
@@ -250,7 +250,32 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <main className="pb-16"> {/* Add padding at the bottom for mobile action buttons */}
+      {pendingUpdates > 0 && deliveries.length === 0 && !isLoading && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-md mb-6">
+          <p className="font-medium">ישנם {pendingUpdates} עדכונים ממתינים אך אין משלוחים להצגה.</p>
+          <p>נסה לסנכרן את העדכונים הממתינים או לייבא משלוחים מחדש.</p>
+          <div className="mt-2 flex gap-2">
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => syncPendingUpdates()}
+              className="text-yellow-700 border-yellow-400"
+            >
+              סנכרן עדכונים ממתינים
+            </Button>
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => clearDeliveries()}
+              className="text-red-600 border-red-200"
+            >
+              נקה עדכונים ממתינים
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <main className="pb-16">
         {viewMode === "table" ? (
           <DeliveryTable
             deliveries={deliveries}
@@ -271,7 +296,6 @@ const Dashboard = () => {
         )}
       </main>
       
-      {/* Completion Dialog */}
       {selectedDelivery && (
         <DeliveryCompletionDialog
           isOpen={completionDialogOpen}
@@ -285,7 +309,6 @@ const Dashboard = () => {
         />
       )}
       
-      {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50 p-4">
           <DeliveryImport
