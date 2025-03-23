@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useFetchDeliveries } from './useFetchDeliveries';
 import { useOfflineMode } from './useOfflineMode';
 import { useDeliveryProcessor } from './data/useDeliveryProcessor';
+import { STORAGE_KEYS } from "@/utils/localStorage";
 
 export function useDeliveryData() {
   const { toast } = useToast();
@@ -40,47 +41,12 @@ export function useDeliveryData() {
     try {
       console.log("Fetching deliveries...");
       
-      // Try to fetch from Supabase edge function
+      // Try to fetch deliveries
       const { deliveries: fetchedDeliveries, statusOptions, lastSyncTime } = 
-        await fetchDeliveries(user.sheetsUrl, forceRefresh)
-          .catch(err => {
-            console.error("Error fetching deliveries from edge function:", err);
-            
-            // Check for CORS-related errors
-            const errorMessage = err?.message || "Unknown error";
-            if (errorMessage.includes("CORS") || errorMessage.includes("Failed to fetch") || 
-                errorMessage.includes("Failed to send a request")) {
-              toast({
-                title: "שגיאת תקשורת",
-                description: "שגיאת CORS בהתחברות לשרת. אנא נסה שוב מאוחר יותר או פנה לתמיכה.",
-                variant: "destructive",
-              });
-            } else {
-              // Show toast for other connection issues
-              toast({
-                title: "שגיאת התחברות",
-                description: errorMessage || "לא ניתן להתחבר לשרת. משתמש במידע מקומי.",
-                variant: "destructive",
-              });
-            }
-            
-            // Return null to continue to fallback
-            throw err;
-          });
+        await fetchDeliveries(user.sheetsUrl, forceRefresh);
       
-      // Process received deliveries
+      // Process and update state
       const processedDeliveries = processDeliveries(fetchedDeliveries);
-      
-      console.log("Loaded deliveries:", processedDeliveries.slice(0, 3));
-      
-      // Log the first few items for debugging
-      console.log("Sample deliveries:", processedDeliveries.slice(0, 5).map(d => ({
-        name: d.name,
-        tracking: d.trackingNumber,
-        phone: d.phone,
-        address: d.address
-      })));
-      
       setDeliveries(processedDeliveries);
       setError(null);
       
@@ -89,12 +55,16 @@ export function useDeliveryData() {
       }
       
       if (lastSyncTime) {
-        setLastSyncTime(new Date(lastSyncTime));
+        setLastSyncTime(lastSyncTime);
       }
+      
+      // Cache deliveries to localStorage
+      localStorage.setItem('cached_deliveries', JSON.stringify(processedDeliveries));
+      
     } catch (err) {
       console.error("Error loading deliveries:", err);
       
-      // Try loading from local storage
+      // Try loading from local storage as fallback
       const cachedDeliveries = localStorage.getItem('cached_deliveries');
       if (cachedDeliveries) {
         try {
@@ -109,20 +79,14 @@ export function useDeliveryData() {
         }
       }
       
-      // For better DX, show debug info in console
+      // Set error message
       if (err instanceof Error) {
-        console.debug("Error details:", err.message, err.stack);
-        setError(err.message || "שגיאה בטעינת נתונים. בדוק את החיבור לאינטרנט.");
+        setError(err.message || "שגיאה בטעינת נתונים");
       } else {
-        setError("שגיאה לא ידועה בטעינת נתונים.");
+        setError("שגיאה לא ידועה בטעינת נתונים");
       }
     } finally {
       setIsLoading(false);
-      
-      // Always cache the current deliveries for offline use
-      if (deliveries.length > 0) {
-        localStorage.setItem('cached_deliveries', JSON.stringify(deliveries));
-      }
     }
   };
 
@@ -131,8 +95,6 @@ export function useDeliveryData() {
     if (!user?.sheetsUrl) return;
     
     try {
-      // For now, we'll just simulate this - in a real implementation, you'd send
-      // the mappings to the backend to store and use for future imports
       console.log("Submitting column mappings:", mappings);
       
       toast({
