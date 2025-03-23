@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { Delivery } from "@/types/delivery";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
-import { saveToStorage, getFromStorage, STORAGE_KEYS } from '@/utils/localStorage';
+import { STORAGE_KEYS } from '@/utils/localStorage';
 import { cleanSheetUrl, isValidSheetUrl } from '@/utils/sheetUrlUtils';
 
 export function useFetchDeliveries(isOnline: boolean) {
@@ -57,74 +57,61 @@ export function useFetchDeliveries(isOnline: boolean) {
             throw new Error("לא ניתן לחלץ מזהה תקין מהקישור לטבלה");
           }
           
-          // Fetch with retry logic
-          const MAX_RETRIES = 2;
-          let error = null;
+          console.log(`Fetching deliveries with forceRefresh=${forceRefresh}`);
           
-          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            try {
-              if (attempt > 0) {
-                console.log(`Retry attempt ${attempt}/${MAX_RETRIES}...`);
-              }
-              
-              const response = await supabase.functions.invoke("sync-sheets", {
-                body: { 
-                  sheetsUrl: cleanedUrl,
-                  forceRefresh: forceRefresh
-                }
-              });
-              
-              if (response.error) {
-                throw response.error;
-              }
-              
-              if (!response.data) {
-                throw new Error("לא התקבלו נתונים מהשרת");
-              }
-              
-              const { deliveries: fetchedDeliveries, statusOptions, lastSyncTime } = response.data;
-              
-              if (!fetchedDeliveries || !Array.isArray(fetchedDeliveries)) {
-                throw new Error("מבנה הנתונים שהתקבל מהשרת אינו תקין");
-              }
-              
-              // Save to cache
-              localStorage.setItem(STORAGE_KEYS.DELIVERIES_CACHE, JSON.stringify(fetchedDeliveries));
-              
-              if (statusOptions && Array.isArray(statusOptions)) {
-                localStorage.setItem(STORAGE_KEYS.STATUS_OPTIONS, JSON.stringify(statusOptions));
-              }
-              
-              const syncTime = lastSyncTime ? new Date(lastSyncTime) : new Date();
-              localStorage.setItem(STORAGE_KEYS.LAST_SYNC, syncTime.toISOString());
-              
-              toast({
-                title: "עדכון נתונים הושלם",
-                description: `נטענו ${fetchedDeliveries.length} משלוחים`,
-              });
-              
-              return {
-                deliveries: fetchedDeliveries,
-                statusOptions: statusOptions || cachedOptions,
-                lastSyncTime: syncTime
-              };
-            } catch (err) {
-              console.error(`Error on attempt ${attempt}:`, err);
-              error = err;
-              // Wait a bit before retrying (exponential backoff)
-              if (attempt < MAX_RETRIES) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
-              }
+          // Invoke the edge function to get the data
+          const response = await supabase.functions.invoke("sync-sheets", {
+            body: { 
+              sheetsUrl: cleanedUrl,
+              forceRefresh: forceRefresh
             }
+          });
+          
+          // Check for errors in the response
+          if (response.error) {
+            console.error("Supabase function error:", response.error);
+            throw new Error(response.error.message || "שגיאה בחיבור לשרת");
           }
           
-          // If we get here, all retries failed
-          throw error || new Error("כל נסיונות החיבור לשרת נכשלו");
+          console.log("Sync-sheets response:", response);
+          
+          // Validate the response data
+          if (!response.data) {
+            throw new Error("לא התקבלו נתונים מהשרת");
+          }
+          
+          const { deliveries: fetchedDeliveries, statusOptions, lastSyncTime } = response.data;
+          
+          if (!fetchedDeliveries || !Array.isArray(fetchedDeliveries)) {
+            throw new Error("מבנה הנתונים שהתקבל מהשרת אינו תקין");
+          }
+          
+          // Save to cache
+          localStorage.setItem(STORAGE_KEYS.DELIVERIES_CACHE, JSON.stringify(fetchedDeliveries));
+          
+          if (statusOptions && Array.isArray(statusOptions)) {
+            localStorage.setItem(STORAGE_KEYS.STATUS_OPTIONS, JSON.stringify(statusOptions));
+          }
+          
+          const syncTime = lastSyncTime ? new Date(lastSyncTime) : new Date();
+          localStorage.setItem(STORAGE_KEYS.LAST_SYNC, syncTime.toISOString());
+          
+          toast({
+            title: "עדכון נתונים הושלם",
+            description: `נטענו ${fetchedDeliveries.length} משלוחים`,
+          });
+          
+          return {
+            deliveries: fetchedDeliveries,
+            statusOptions: statusOptions || cachedOptions,
+            lastSyncTime: syncTime
+          };
         } catch (err) {
           console.error("Error fetching from Supabase:", err);
           
-          // Check for CORS errors
+          // Check for CORS errors or connection issues
           const errorMessage = err instanceof Error ? err.message : String(err);
+          
           if (
             errorMessage.includes("CORS") || 
             errorMessage.includes("Failed to fetch") || 
@@ -132,7 +119,7 @@ export function useFetchDeliveries(isOnline: boolean) {
           ) {
             toast({
               title: "שגיאת תקשורת",
-              description: "שגיאת CORS בהתחברות לשרת. אנא נסה שוב מאוחר יותר או פנה לתמיכה.",
+              description: "לא ניתן להתחבר לשרת המרוחק. אנא נסה שוב מאוחר יותר.",
               variant: "destructive",
             });
           } else {
@@ -147,6 +134,11 @@ export function useFetchDeliveries(isOnline: boolean) {
           if (cachedData.length > 0) {
             const lastSyncStr = localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
             const lastSyncTime = lastSyncStr ? new Date(lastSyncStr) : null;
+            
+            toast({
+              title: "נטען ממטמון מקומי",
+              description: "משתמש בנתונים שנשמרו מקומית",
+            });
             
             return {
               deliveries: cachedData,

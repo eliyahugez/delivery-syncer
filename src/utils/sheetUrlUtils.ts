@@ -1,94 +1,54 @@
-/**
- * Utility functions for handling Google Sheets URLs
- */
 
 /**
- * Validates if a string is a valid Google Sheets URL or ID
+ * Validates if a string is a valid Google Sheets URL
  */
 export const isValidSheetUrl = (url: string): boolean => {
-  if (!url || url.trim() === "") return false;
+  if (!url) return false;
   
-  // Check if it's already just a valid spreadsheet ID
-  if (/^[a-zA-Z0-9-_]{25,45}$/.test(url)) {
+  // Check if it's a URL to a Google Sheets document
+  if (url.includes('docs.google.com/spreadsheets')) {
     return true;
   }
   
-  // Check if it contains a valid Google Sheets URL pattern
-  return (
-    url.includes("docs.google.com/spreadsheets") || 
-    url.includes("/d/") ||
-    url.match(/key=[a-zA-Z0-9-_]+/) !== null
-  );
+  // Check if it's a direct spreadsheet ID
+  // Google Sheets IDs are typically 44 characters, but can vary
+  if (/^[a-zA-Z0-9-_]{25,45}$/.test(url.trim())) {
+    return true;
+  }
+  
+  return false;
 };
 
 /**
  * Cleans a Google Sheets URL to extract just the spreadsheet ID
  */
 export const cleanSheetUrl = (url: string): string => {
-  if (!url) return "";
+  if (!url) return '';
   
-  // If it's already just an ID, return it
-  if (/^[a-zA-Z0-9-_]{25,45}$/.test(url)) {
-    return url;
+  // Already just an ID
+  if (/^[a-zA-Z0-9-_]{25,45}$/.test(url.trim())) {
+    return url.trim();
   }
   
-  try {
-    // Extract the spreadsheet ID
-    // Format: /d/{spreadsheetId}/
-    let match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    if (match && match[1]) {
-      return match[1]; // Just return the ID to avoid URL format issues
+  // Try to extract the ID from the URL
+  const patterns = [
+    /\/d\/([a-zA-Z0-9-_]+)/,                     // Common pattern with /d/
+    /spreadsheets\/d\/([a-zA-Z0-9-_]+)/,         // Full URL with spreadsheets/d/
+    /key=([a-zA-Z0-9-_]+)/,                      // URL with key parameter
+    /spreadsheets\.(google|corp\.google)\.com.*[?&]id=([a-zA-Z0-9-_]+)/ // URL with id parameter
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      // For the last pattern, the ID is in group 2, for others it's in group 1
+      const group = pattern === patterns[3] ? 2 : 1;
+      if (match[group]) {
+        return match[group];
+      }
     }
-    
-    // Format: spreadsheets/d/{spreadsheetId}/
-    match = url.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (match && match[1]) {
-      return match[1]; // Just return the ID to avoid URL format issues
-    }
-    
-    // Format: key={spreadsheetId}
-    match = url.match(/key=([a-zA-Z0-9-_]+)/);
-    if (match && match[1]) {
-      return match[1]; // Just return the ID to avoid URL format issues
-    }
-    
-    // Format with gid parameter
-    match = url.match(/\/d\/([a-zA-Z0-9-_]+).*#gid=\d+/);
-    if (match && match[1]) {
-      return match[1]; // Return just the ID without the gid
-    }
-  } catch (error) {
-    console.error("Error cleaning sheet URL:", error);
   }
   
-  // Return the original if we couldn't clean it
+  // If no pattern matched, return the original URL as a fallback
   return url;
-};
-
-/**
- * Formats a spreadsheet ID into a properly formatted Google Sheets URL
- */
-export const formatSheetUrl = (spreadsheetId: string): string => {
-  if (!spreadsheetId) return "";
-  
-  // If it's already a full URL, return it
-  if (spreadsheetId.startsWith("https://")) {
-    return spreadsheetId;
-  }
-  
-  // Otherwise, format it as a Google Sheets URL
-  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-};
-
-/**
- * Gets a display-friendly version of the sheet URL (shortened)
- */
-export const getDisplaySheetUrl = (url: string): string => {
-  const id = cleanSheetUrl(url);
-  if (!id) return "";
-  
-  // Return a shortened display version
-  return id.length > 12 
-    ? `${id.substring(0, 6)}...${id.substring(id.length - 6)}`
-    : id;
 };

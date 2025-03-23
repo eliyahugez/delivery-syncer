@@ -59,13 +59,13 @@ export function useDeliveryData() {
       }
       
       // Cache deliveries to localStorage
-      localStorage.setItem('cached_deliveries', JSON.stringify(processedDeliveries));
+      localStorage.setItem(STORAGE_KEYS.DELIVERIES_CACHE, JSON.stringify(processedDeliveries));
       
     } catch (err) {
       console.error("Error loading deliveries:", err);
       
       // Try loading from local storage as fallback
-      const cachedDeliveries = localStorage.getItem('cached_deliveries');
+      const cachedDeliveries = localStorage.getItem(STORAGE_KEYS.DELIVERIES_CACHE);
       if (cachedDeliveries) {
         try {
           const parsed = JSON.parse(cachedDeliveries);
