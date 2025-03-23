@@ -8,15 +8,19 @@ import DeliveryImportWizard from './DeliveryImportWizard';
 import { isValidSheetUrl } from '@/utils/sheetUrlUtils';
 
 interface DeliveryImportProps {
-  onImport: (forceRefresh?: boolean) => Promise<void>;
-  onColumnMappingSubmit: (mappings: Record<string, number>) => void;
-  isLoading: boolean;
+  onImportComplete?: (importedData: any[], mappings: Record<string, string>) => void;
+  onImport?: (forceRefresh?: boolean) => Promise<void>;
+  onColumnMappingSubmit?: (mappings: Record<string, number>) => void;
+  isLoading?: boolean;
+  onClose?: () => void;
 }
 
 const DeliveryImport: React.FC<DeliveryImportProps> = ({
+  onImportComplete,
   onImport,
   onColumnMappingSubmit,
-  isLoading
+  isLoading = false,
+  onClose
 }) => {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const { toast } = useToast();
@@ -24,7 +28,9 @@ const DeliveryImport: React.FC<DeliveryImportProps> = ({
   
   const handleImport = async () => {
     try {
-      await onImport(true);
+      if (onImport) {
+        await onImport(true);
+      }
     } catch (error) {
       console.error("Error importing deliveries:", error);
       toast({
@@ -50,7 +56,25 @@ const DeliveryImport: React.FC<DeliveryImportProps> = ({
   
   const handleSubmitMapping = (mappings: Record<string, number>) => {
     console.log("Import completed:", Object.keys(mappings).length, "items");
-    onColumnMappingSubmit(mappings);
+    
+    if (onColumnMappingSubmit) {
+      onColumnMappingSubmit(mappings);
+    }
+    
+    // Also call onImportComplete with empty array and string mappings when needed
+    if (onImportComplete) {
+      const stringMappings: Record<string, string> = {};
+      Object.entries(mappings).forEach(([key, value]) => {
+        stringMappings[key] = value.toString();
+      });
+      onImportComplete([], stringMappings);
+    }
+  };
+  
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    }
   };
   
   return (
@@ -88,6 +112,17 @@ const DeliveryImport: React.FC<DeliveryImportProps> = ({
           sheetsUrl={user.sheetsUrl}
           onSubmit={handleSubmitMapping}
         />
+      )}
+      
+      {onClose && (
+        <Button 
+          onClick={handleClose}
+          variant="outline" 
+          size="sm"
+          className="mt-2 sm:mt-0"
+        >
+          סגור
+        </Button>
       )}
     </div>
   );
