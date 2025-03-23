@@ -6,6 +6,12 @@ export function extractSheetId(url: string): string | null {
   console.log("Extracting sheet ID from URL:", url);
   
   try {
+    // If already a sheet ID (25-45 chars of letters, numbers, hyphens, underscores)
+    if (/^[a-zA-Z0-9-_]{25,45}$/.test(url.trim())) {
+      console.log("URL appears to be a direct ID");
+      return url.trim();
+    }
+    
     // Format: /d/{spreadsheetId}/
     const regex1 = /\/d\/([a-zA-Z0-9-_]+)/;
     const match1 = url.match(regex1);
@@ -38,21 +44,6 @@ export function extractSheetId(url: string): string | null {
       return match4[1];
     }
     
-    // Handle full URL formats without explicit /d/ pattern
-    const regex5 = /spreadsheets\.(google|corp\.google)\.com.*[?&]id=([a-zA-Z0-9-_]+)/;
-    const match5 = url.match(regex5);
-    if (match5 && match5[2]) {
-      console.log("Extracted using full URL pattern:", match5[2]);
-      return match5[2];
-    }
-    
-    // Direct ID (if the user just provided the ID)
-    const directIdRegex = /^[a-zA-Z0-9-_]{25,45}$/;
-    if (directIdRegex.test(url)) {
-      console.log("URL appears to be a direct ID");
-      return url;
-    }
-    
     // Last attempt - try to extract anything that looks like a spreadsheet ID
     const generalIdRegex = /([a-zA-Z0-9-_]{25,45})/;
     const generalMatch = url.match(generalIdRegex);
@@ -62,10 +53,10 @@ export function extractSheetId(url: string): string | null {
     }
     
     console.log("No valid sheet ID pattern found in URL");
-    return url; // As a fallback, return the entire URL and let the Google API handle it
+    return null;
   } catch (error) {
     console.error("Error extracting sheet ID:", error);
-    return url; // Return the complete URL as a last resort
+    return null;
   }
 }
 
@@ -128,27 +119,4 @@ export async function fetchSheetsData(spreadsheetId: string) {
     console.error("Error in fetchSheetsData:", error);
     throw error;
   }
-}
-
-// Format phone number to international format
-export function formatPhoneNumber(phone: string): string {
-  if (!phone) return "";
-  
-  // Remove non-digit characters
-  let digits = phone.replace(/\D/g, "");
-  
-  // Format to international format (+972)
-  if (digits.startsWith("972")) {
-    return `+${digits}`;
-  } else if (digits.startsWith("0")) {
-    return `+972${digits.substring(1)}`;
-  }
-  
-  // If it's not starting with 0 or 972, and it has 9-10 digits, assume it's a local number
-  if (digits.length >= 9 && digits.length <= 10) {
-    return `+972${digits}`;
-  }
-  
-  // Otherwise, return as is
-  return phone;
 }

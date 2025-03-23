@@ -44,6 +44,9 @@ export function useDeliveries() {
           description: "כל השינויים המקומיים סונכרנו בהצלחה עם השרת",
           variant: "default",
         });
+        
+        // After syncing pending updates, refresh the deliveries
+        await fetchDeliveries(true);
         return true;
       } catch (error) {
         console.error("Error syncing pending updates:", error);
@@ -65,10 +68,9 @@ export function useDeliveries() {
       setDeliveries([]);
       
       // Clear localStorage cache
-      removeFromStorage('cached_deliveries');
       removeFromStorage(STORAGE_KEYS.DELIVERIES_CACHE);
       
-      // Also clear pending updates to avoid the inconsistency
+      // Also clear pending updates to avoid inconsistency
       clearAllOfflineChanges();
       
       console.log("All deliveries and pending updates cleared");
@@ -121,6 +123,6 @@ export function useDeliveries() {
     deliveryStatusOptions,
     clearDeliveries,
     forceRefresh,
-    ...deliveryGroups
+    deliveryGroups
   };
 }

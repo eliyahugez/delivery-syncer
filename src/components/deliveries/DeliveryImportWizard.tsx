@@ -1,86 +1,202 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Spinner } from "@/components/ui/spinner";
+import { extractSheetId } from '@/utils/sheetUrlUtils';
 
 interface DeliveryImportWizardProps {
   isOpen: boolean;
   onClose: () => void;
-  sheetsUrl: string;
-  onSubmit: (mappings: Record<string, number>) => void;
+  onImportComplete: (importedData: any[]) => void;
 }
 
 const DeliveryImportWizard: React.FC<DeliveryImportWizardProps> = ({
   isOpen,
   onClose,
-  sheetsUrl,
-  onSubmit
+  onImportComplete
 }) => {
   const { toast } = useToast();
+  const [sheetsUrl, setSheetsUrl] = useState("");
+  const [sheetId, setSheetId] = useState<string | null>(null);
   const [step, setStep] = useState(1);
-  const [mappings, setMappings] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Extract sheet ID when URL changes
+  useEffect(() => {
+    if (sheetsUrl) {
+      const id = extractSheetId(sheetsUrl);
+      setSheetId(id);
+    } else {
+      setSheetId(null);
+    }
+  }, [sheetsUrl]);
+  
+  const fetchPreview = async () => {
+    if (!sheetId) {
+      setError("לא ניתן לחלץ מזהה גיליון תקין מהקישור");
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Call the Supabase function to get preview data
+      const response = await supabase.functions.invoke("sync-sheets", {
+        body: { 
+          sheetsUrl: sheetId,
+          preview: true
+        }
+      });
+      
+      if (response.error) {
+        throw new Error(response.error.message || "שגיאה בטעינת נתונים מהגיליון");
+      }
+      
+      // Check if we have valid preview data
+      if (!response.data || !response.data.previewData || !Array.isArray(response.data.previewData)) {
+        throw new Error("לא התקבלו נתונים תקינים מהגיליון");
+      }
+      
+      setPreviewData(response.data.previewData);
+      setStep(2); // Move to the preview step
+    } catch (err) {
+      console.error("Error fetching preview:", err);
+      setError(err instanceof Error ? err.message : "שגיאה לא ידועה");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const importDeliveries = async () => {
+    if (!sheetId) {
+      setError("מזהה גיליון חסר");
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Call the Supabase function to import data
+      const response = await supabase.functions.invoke("sync-sheets", {
+        body: { 
+          sheetsUrl: sheetId,
+          forceRefresh: true
+        }
+      });
+      
+      if (response.error) {
+        throw new Error(response.error.message || "שגיאה בייבוא נתונים מהגיליון");
+      }
+      
+      // Check if we have valid delivery data
+      if (!response.data || !response.data.deliveries || !Array.isArray(response.data.deliveries)) {
+        throw new Error("לא התקבלו נתוני משלוחים תקינים");
+      }
+      
+      toast({
+        title: "ייבוא הושלם בהצלחה",
+        description: `יובאו ${response.data.deliveries.length} משלוחים`,
+      });
+      
+      onImportComplete(response.data.deliveries);
+      onClose();
+    } catch (err) {
+      console.error("Error importing deliveries:", err);
+      setError(err instanceof Error ? err.message : "שגיאה לא ידועה");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const handleNext = () => {
-    if (step < 3) {
-      setStep(step + 1);
-    } else {
-      handleSubmit();
+    if (step === 1) {
+      fetchPreview();
+    } else if (step === 2) {
+      importDeliveries();
     }
   };
   
-  const handleBack = () => {
-    if (step > 1) {
-      setStep(step - 1);
-    }
-  };
-  
-  const handleSubmit = () => {
-    try {
-      setLoading(true);
+  const renderStep = () => {
+    switch (step) {
+      case 1:
+        return (
+          <div className="space-y-4">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-medium">שלב 1: הכנס קישור לטבלת Google Sheets</h3>
+              <p className="text-sm text-gray-500">הכנס את הקישור לטבלה שממנה תרצה לייבא משלוחים</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="sheetsUrl">קישור לגיליון</Label>
+              <Input 
+                id="sheetsUrl"
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+                value={sheetsUrl}
+                onChange={(e) => setSheetsUrl(e.target.value)}
+                className="ltr"
+                dir="ltr"
+              />
+              {sheetId && (
+                <p className="text-sm text-green-600">מזהה גיליון: {sheetId}</p>
+              )}
+            </div>
+          </div>
+        );
       
-      // Create default mappings if none are provided
-      const defaultMappings = {
-        trackingNumber: 0,
-        name: 1,
-        phone: 2,
-        address: 3,
-        status: 4,
-        assignedTo: 5
-      };
+      case 2:
+        return (
+          <div className="space-y-4">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-medium">שלב 2: תצוגה מקדימה של הנתונים</h3>
+              <p className="text-sm text-gray-500">המערכת מצאה את הנתונים הבאים בגיליון. האם לייבא אותם?</p>
+            </div>
+            
+            <ScrollArea className="h-[300px] rounded-md border">
+              {previewData.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    {previewData[0] && Object.keys(previewData[0]).map((key, i) => (
+                      <TableHead key={i}>{key}</TableHead>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {previewData.slice(0, 5).map((row, rowIndex) => (
+                      <TableRow key={rowIndex}>
+                        {Object.values(row).map((cell: any, cellIndex) => (
+                          <TableCell key={cellIndex}>{String(cell)}</TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="p-4 text-center text-gray-500">
+                  אין נתונים להצגה
+                </div>
+              )}
+            </ScrollArea>
+            
+            <p className="text-sm text-gray-500">
+              {previewData.length > 5 
+                ? `מוצגים 5 מתוך ${previewData.length} רשומות. לחץ "ייבא" כדי לייבא את כל הנתונים.` 
+                : ''}
+            </p>
+          </div>
+        );
       
-      // Combine user mappings with defaults
-      const finalMappings = { ...defaultMappings, ...mappings };
-      
-      onSubmit(finalMappings);
-      toast({
-        title: "ייבוא הושלם",
-        description: "מיפוי העמודות נשמר והנתונים מיובאים"
-      });
-      
-      onClose();
-    } catch (error) {
-      console.error("Error submitting mappings:", error);
-      toast({
-        title: "שגיאה בייבוא",
-        description: "אירעה שגיאה בתהליך הייבוא",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleInputChange = (field: string, value: string) => {
-    const columnIndex = parseInt(value);
-    if (!isNaN(columnIndex)) {
-      setMappings(prev => ({
-        ...prev,
-        [field]: columnIndex
-      }));
+      default:
+        return null;
     }
   };
   
@@ -91,103 +207,30 @@ const DeliveryImportWizard: React.FC<DeliveryImportWizardProps> = ({
           <DialogTitle>אשף ייבוא משלוחים</DialogTitle>
         </DialogHeader>
         
-        {step === 1 && (
-          <div className="space-y-4">
-            <div className="text-center mb-4">
-              <h3 className="text-lg font-medium">שלב 1: מקור הנתונים</h3>
-              <p className="text-sm text-gray-500">המערכת תייבא נתונים מהטבלה הבאה:</p>
-            </div>
-            
-            <div className="p-3 bg-gray-100 rounded-md">
-              <p className="text-sm font-mono break-all">{sheetsUrl}</p>
-            </div>
-            
-            <p className="text-sm text-gray-500">ודא שהקישור לטבלה נכון וכי הוא נגיש למערכת.</p>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4">
+            <p>{error}</p>
           </div>
         )}
         
-        {step === 2 && (
-          <div className="space-y-4">
-            <div className="text-center mb-4">
-              <h3 className="text-lg font-medium">שלב 2: מיפוי עמודות</h3>
-              <p className="text-sm text-gray-500">הגדר איזה עמודה בטבלה מכילה כל סוג מידע</p>
-            </div>
-            
-            <div className="grid gap-3">
-              <div className="grid grid-cols-2 gap-2">
-                <Label htmlFor="trackingNumber" className="self-center">מספר מעקב</Label>
-                <Input 
-                  id="trackingNumber" 
-                  type="number" 
-                  min="0"
-                  placeholder="0" 
-                  value={mappings.trackingNumber ?? ""}
-                  onChange={(e) => handleInputChange('trackingNumber', e.target.value)}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <Label htmlFor="name" className="self-center">שם</Label>
-                <Input 
-                  id="name" 
-                  type="number" 
-                  min="0" 
-                  placeholder="1"
-                  value={mappings.name ?? ""}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <Label htmlFor="phone" className="self-center">טלפון</Label>
-                <Input 
-                  id="phone" 
-                  type="number" 
-                  min="0" 
-                  placeholder="2"
-                  value={mappings.phone ?? ""}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <Label htmlFor="address" className="self-center">כתובת</Label>
-                <Input 
-                  id="address" 
-                  type="number" 
-                  min="0" 
-                  placeholder="3"
-                  value={mappings.address ?? ""}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {step === 3 && (
-          <div className="space-y-4">
-            <div className="text-center mb-4">
-              <h3 className="text-lg font-medium">שלב 3: אישור ייבוא</h3>
-              <p className="text-sm text-gray-500">המערכת תייבא את הנתונים לפי המיפוי שהגדרת</p>
-            </div>
-            
-            <div className="p-4 bg-blue-50 rounded-md">
-              <p className="text-sm">לחץ על "סיום" כדי להתחיל בייבוא הנתונים.</p>
-              <p className="text-sm mt-2">הייבוא עשוי להימשך מספר שניות.</p>
-            </div>
-          </div>
-        )}
+        {renderStep()}
         
         <DialogFooter className="flex justify-between">
           {step > 1 && (
-            <Button variant="outline" onClick={handleBack} disabled={loading}>
+            <Button variant="outline" onClick={() => setStep(step - 1)} disabled={isLoading}>
               חזרה
             </Button>
           )}
           
-          <Button onClick={handleNext} disabled={loading}>
-            {loading ? "מעבד..." : step === 3 ? "סיום" : "הבא"}
+          <Button onClick={handleNext} disabled={isLoading || (step === 1 && !sheetId)}>
+            {isLoading ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" />
+                <span>מעבד...</span>
+              </>
+            ) : (
+              step === 2 ? "ייבא משלוחים" : "המשך"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

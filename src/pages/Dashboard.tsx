@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useDeliveries } from "@/hooks/useDeliveries";
 import { useAuth } from "@/context/AuthContext";
@@ -15,6 +16,7 @@ import { Delivery } from "@/types/delivery";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Trash2, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -52,11 +54,12 @@ const Dashboard = () => {
     toggleNearbyDeliveries 
   } = useLocationTracking();
 
+  // Check for inconsistencies: pending updates but no deliveries
   useEffect(() => {
     if (pendingUpdates > 0 && deliveries.length === 0 && !isLoading) {
-      fetchDeliveries(true);
+      console.log(`Data inconsistency detected: ${pendingUpdates} pending updates but 0 deliveries`);
     }
-  }, [pendingUpdates, deliveries.length, isLoading, fetchDeliveries]);
+  }, [pendingUpdates, deliveries.length, isLoading]);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -119,9 +122,8 @@ const Dashboard = () => {
     setSelectedDelivery(null);
   };
   
-  const handleImportComplete = (importedData: any[], mappings: Record<string, string>) => {
+  const handleImportComplete = (importedData: any[]) => {
     console.log("Import completed:", importedData.length, "items");
-    console.log("Column mappings:", mappings);
     
     fetchDeliveries();
     setShowImportModal(false);
@@ -198,6 +200,36 @@ const Dashboard = () => {
 
       <ErrorDisplay error={error} handleSync={handleSync} />
       
+      {/* Data Inconsistency Warning */}
+      {pendingUpdates > 0 && deliveries.length === 0 && !isLoading && (
+        <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-700 mb-4">
+          <AlertDescription>
+            <div className="flex flex-col space-y-2">
+              <p className="font-medium">נמצאו {pendingUpdates} עדכונים ממתינים אך אין משלוחים להצגה.</p>
+              <p>עדכן את הנתונים או נקה את העדכונים הממתינים כדי לפתור את הבעיה.</p>
+              <div className="flex gap-2 mt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => syncPendingUpdates()}
+                  className="text-yellow-700 border-yellow-400 hover:bg-yellow-100"
+                >
+                  סנכרן עדכונים
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => clearDeliveries()}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  נקה עדכונים ממתינים
+                </Button>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <div className="mb-4 flex justify-between items-center">
         <DeliveryArchiveManager onArchive={handleArchive} />
         
@@ -249,31 +281,6 @@ const Dashboard = () => {
           </Dialog>
         </div>
       </div>
-
-      {pendingUpdates > 0 && deliveries.length === 0 && !isLoading && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-md mb-6">
-          <p className="font-medium">ישנם {pendingUpdates} עדכונים ממתינים אך אין משלוחים להצגה.</p>
-          <p>נסה לסנכרן את העדכונים הממתינים או לייבא משלוחים מחדש.</p>
-          <div className="mt-2 flex gap-2">
-            <Button 
-              variant="outline"
-              size="sm"
-              onClick={() => syncPendingUpdates()}
-              className="text-yellow-700 border-yellow-400"
-            >
-              סנכרן עדכונים ממתינים
-            </Button>
-            <Button 
-              variant="outline"
-              size="sm"
-              onClick={() => clearDeliveries()}
-              className="text-red-600 border-red-200"
-            >
-              נקה עדכונים ממתינים
-            </Button>
-          </div>
-        </div>
-      )}
 
       <main className="pb-16">
         {viewMode === "table" ? (
