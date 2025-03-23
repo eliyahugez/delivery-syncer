@@ -36,8 +36,25 @@ export function useDeliveries() {
   // Handle syncing pending updates with correct sheetsUrl
   const handleSyncPendingUpdates = async () => {
     if (user?.sheetsUrl) {
-      await syncPendingUpdates(user.sheetsUrl);
+      try {
+        await syncPendingUpdates(user.sheetsUrl);
+        toast({
+          title: "סנכרון שינויים",
+          description: "כל השינויים המקומיים סונכרנו בהצלחה עם השרת",
+          variant: "default",
+        });
+        return true;
+      } catch (error) {
+        console.error("Error syncing pending updates:", error);
+        toast({
+          title: "שגיאה בסנכרון שינויים",
+          description: "לא ניתן היה לסנכרן את השינויים המקומיים. נסה שנית מאוחר יותר.",
+          variant: "destructive",
+        });
+        return false;
+      }
     }
+    return false;
   };
   
   // Function to clear all deliveries from local state and storage
@@ -48,6 +65,7 @@ export function useDeliveries() {
       
       // Clear localStorage cache
       localStorage.removeItem('cached_deliveries');
+      localStorage.removeItem(STORAGE_KEYS.DELIVERIES_CACHE);
       
       console.log("All deliveries cleared");
       
@@ -64,6 +82,28 @@ export function useDeliveries() {
     }
   };
 
+  // Handle force refresh with proper error handling
+  const forceRefresh = async () => {
+    try {
+      toast({
+        title: "מרענן נתונים",
+        description: "מבצע סנכרון מלא מול השרת...",
+        variant: "default",
+      });
+      
+      await fetchDeliveries(true); // Pass forceRefresh=true
+      return true;
+    } catch (error) {
+      console.error("Force refresh error:", error);
+      toast({
+        title: "שגיאה בריענון נתונים",
+        description: error instanceof Error ? error.message : "אירעה שגיאה לא ידועה",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   return {
     deliveries,
     isLoading,
@@ -76,6 +116,7 @@ export function useDeliveries() {
     syncPendingUpdates: handleSyncPendingUpdates,
     deliveryStatusOptions,
     clearDeliveries,
+    forceRefresh,
     ...deliveryGroups
   };
 }

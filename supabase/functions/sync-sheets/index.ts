@@ -9,9 +9,12 @@ import { verifyDatabaseSchema } from "./utils/dbDebug.ts";
 import { formatError, safeApiCall } from "./utils/errorHandler.ts";
 
 serve(async (req) => {
-  // Handle CORS
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { 
+      headers: corsHeaders,
+      status: 200
+    });
   }
 
   try {

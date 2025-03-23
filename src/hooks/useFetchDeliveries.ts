@@ -63,16 +63,37 @@ export function useFetchDeliveries(isOnline: boolean) {
           
           // Now fetch the full data with force refresh flag if needed
           console.log(`Fetching deliveries with forceRefresh=${forceRefresh}`);
-          const response = await supabase.functions.invoke("sync-sheets", {
-            body: { 
-              sheetsUrl: cleanedUrl,
-              forceRefresh: forceRefresh // Pass the forceRefresh flag
+          
+          // Add retry mechanism
+          const maxRetries = 3;
+          let retryCount = 0;
+          let response = null;
+          
+          while (retryCount < maxRetries) {
+            try {
+              response = await supabase.functions.invoke("sync-sheets", {
+                body: { 
+                  sheetsUrl: cleanedUrl,
+                  forceRefresh: forceRefresh
+                }
+              });
+              break; // Success, exit retry loop
+            } catch (retryError) {
+              retryCount++;
+              console.error(`Attempt ${retryCount} failed:`, retryError);
+              
+              if (retryCount >= maxRetries) {
+                throw retryError; // Rethrow after max retries
+              }
+              
+              // Wait before retrying (exponential backoff)
+              await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
             }
-          });
+          }
           
           console.log("Sync-sheets response:", response);
           
-          if (response.error) {
+          if (response?.error) {
             console.error("Supabase function error:", response.error);
             
             // If the response error indicates the server-side Error, but we have a data response,
@@ -145,7 +166,7 @@ export function useFetchDeliveries(isOnline: boolean) {
             }
           }
           
-          if (response.data?.error) {
+          if (response?.data?.error) {
             console.error("Edge function returned error:", response.data.error);
             
             // Enhanced debugging for edge function errors
@@ -158,7 +179,7 @@ export function useFetchDeliveries(isOnline: boolean) {
             throw new Error(response.data.error);
           }
           
-          if (response.data?.deliveries) {
+          if (response?.data?.deliveries) {
             fetchedDeliveries = response.data.deliveries;
             
             // If no deliveries were returned but we have failed rows, show detailed error
@@ -214,7 +235,7 @@ export function useFetchDeliveries(isOnline: boolean) {
               lastSyncTime: now
             };
           } else {
-            console.error("No deliveries data in response:", response.data);
+            console.error("No deliveries data in response:", response?.data);
             
             throw new Error("לא התקבלו נתוני משלוחים מהשרת. ייתכן בגלל בעיית הרשאות או מבנה טבלה שגוי.");
           }
