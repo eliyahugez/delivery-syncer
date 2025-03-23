@@ -46,12 +46,23 @@ export function useDeliveryData() {
           .catch(err => {
             console.error("Error fetching deliveries from edge function:", err);
             
-            // Show toast for connection issues
-            toast({
-              title: "שגיאת התחברות",
-              description: err.message || "לא ניתן להתחבר לשרת. משתמש במידע מקומי.",
-              variant: "destructive",
-            });
+            // Check for CORS-related errors
+            const errorMessage = err?.message || "Unknown error";
+            if (errorMessage.includes("CORS") || errorMessage.includes("Failed to fetch") || 
+                errorMessage.includes("Failed to send a request")) {
+              toast({
+                title: "שגיאת תקשורת",
+                description: "שגיאת CORS בהתחברות לשרת. אנא נסה שוב מאוחר יותר או פנה לתמיכה.",
+                variant: "destructive",
+              });
+            } else {
+              // Show toast for other connection issues
+              toast({
+                title: "שגיאת התחברות",
+                description: errorMessage || "לא ניתן להתחבר לשרת. משתמש במידע מקומי.",
+                variant: "destructive",
+              });
+            }
             
             // Return null to continue to fallback
             throw err;

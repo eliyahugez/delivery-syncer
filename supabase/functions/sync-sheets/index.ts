@@ -11,9 +11,10 @@ import { formatError, safeApiCall } from "./utils/errorHandler.ts";
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { 
-      headers: corsHeaders,
-      status: 200
+    console.log("Handling OPTIONS request with CORS headers");
+    return new Response(null, { 
+      headers: { ...corsHeaders },
+      status: 204
     });
   }
 
