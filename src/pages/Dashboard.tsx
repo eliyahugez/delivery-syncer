@@ -1,21 +1,20 @@
+
 import React, { useState, useEffect } from "react";
 import { useDeliveries } from "@/hooks/useDeliveries";
 import { useAuth } from "@/context/AuthContext";
-import DeliveryTable from "@/components/deliveries/DeliveryTable";
-import DeliveryGroups from "@/components/deliveries/DeliveryGroups";
-import DeliveryImport from "@/components/deliveries/DeliveryImport";
-import SheetsUrlSetter from "@/components/settings/SheetsUrlSetter";
-import DashboardHeader from "@/components/dashboard/DashboardHeader";
-import ErrorDisplay from "@/components/dashboard/ErrorDisplay";
 import { useLocationTracking } from "@/hooks/useLocationTracking";
-import DeliveryCompletionDialog from "@/components/deliveries/modals/DeliveryCompletionDialog";
-import DeliveryArchiveManager from "@/components/settings/DeliveryArchiveManager";
 import { useToast } from "@/components/ui/use-toast";
 import { Delivery } from "@/types/delivery";
-import { Button } from "@/components/ui/button";
-import { RefreshCw, Trash2, Upload } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Components
+import DashboardHeader from "@/components/dashboard/DashboardHeader";
+import ErrorDisplay from "@/components/dashboard/ErrorDisplay";
+import DeliveryCompletionDialog from "@/components/deliveries/modals/DeliveryCompletionDialog";
+import DeliveryImport from "@/components/deliveries/DeliveryImport";
+import DashboardContent from "@/components/dashboard/DashboardContent";
+import DataInconsistencyWarning from "@/components/dashboard/DataInconsistencyWarning";
+import DashboardActions from "@/components/dashboard/DashboardActions";
+import SetupInstructions from "@/components/dashboard/SetupInstructions";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -153,6 +152,7 @@ const Dashboard = () => {
     }
   };
 
+  // Create groups record for delivery groups component
   const groupsRecord: Record<string, Delivery[]> = {};
   if (deliveryGroups.deliveryGroups) {
     deliveryGroups.deliveryGroups.forEach(group => {
@@ -160,26 +160,9 @@ const Dashboard = () => {
     });
   }
 
+  // Show setup instructions if no sheets URL is configured
   if (!user?.sheetsUrl) {
-    return (
-      <div className="container mx-auto px-4 py-6">
-        <h1 className="text-3xl font-bold mb-6">לוח בקרת משלוחים</h1>
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-md mb-6">
-          <p className="font-medium">כדי להתחיל להשתמש במערכת, אנא הגדר קישור לטבלת Google Sheets:</p>
-        </div>
-        
-        <SheetsUrlSetter onSync={handleSync} />
-        
-        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-md">
-          <p className="font-medium">הוראות:</p>
-          <ol className="list-decimal list-inside mt-2 space-y-1">
-            <li>ודא כי טבלת Google Sheets שלך מוגדרת כציבורית או משותפת עם הרשאות צפייה לכל מי שיש לו את הלינק</li>
-            <li>וודא שיש בטבלה לפחות עמודות עבור: מספר מעקב, שם לקוח, טלפון, כתובת וסטטוס</li>
-            <li>העתק את הלינק לטבלה והדבק אותו בשדה למעלה</li>
-          </ol>
-        </div>
-      </div>
-    );
+    return <SetupInstructions handleSync={handleSync} />;
   }
 
   return (
@@ -202,106 +185,35 @@ const Dashboard = () => {
       <ErrorDisplay error={error} handleSync={handleSync} />
       
       {/* Data Inconsistency Warning */}
-      {pendingUpdates > 0 && deliveries.length === 0 && !isLoading && (
-        <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-700 mb-4">
-          <AlertDescription>
-            <div className="flex flex-col space-y-2">
-              <p className="font-medium">נמצאו {pendingUpdates} עדכונים ממתינים אך אין משלוחים להצגה.</p>
-              <p>עדכן את הנתונים או נקה את העדכונים הממתינים כדי לפתור את הבעיה.</p>
-              <div className="flex gap-2 mt-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => syncPendingUpdates()}
-                  className="text-yellow-700 border-yellow-400 hover:bg-yellow-100"
-                >
-                  סנכרן עדכונים
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => clearDeliveries()}
-                  className="text-red-600 border-red-200 hover:bg-red-50"
-                >
-                  נקה עדכונים ממתינים
-                </Button>
-              </div>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
+      <DataInconsistencyWarning 
+        pendingUpdates={pendingUpdates} 
+        isLoading={isLoading}
+        syncPendingUpdates={syncPendingUpdates}
+        clearDeliveries={clearDeliveries}
+        isVisible={pendingUpdates > 0 && deliveries.length === 0 && !isLoading}
+      />
       
-      <div className="mb-4 flex justify-between items-center">
-        <DeliveryArchiveManager onArchive={handleArchive} />
-        
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-green-600 border-green-200 hover:bg-green-50"
-            onClick={() => setShowImportModal(true)}
-          >
-            <Upload className="h-4 w-4 mr-1" />
-            ייבוא משלוחים
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-blue-600 border-blue-200 hover:bg-blue-50"
-            onClick={handleSync}
-            disabled={isSyncing}
-          >
-            <RefreshCw className={`h-4 w-4 mr-1 ${isSyncing ? 'animate-spin' : ''}`} />
-            סנכרון
-          </Button>
-          
-          <Dialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
-            <DialogTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-red-600 border-red-200 hover:bg-red-50"
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                ניקוי נתונים
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>ניקוי משלוחים</DialogTitle>
-                <DialogDescription>
-                  האם אתה בטוח שברצונך למחוק את כל המשלוחים והעדכונים הממתינים? פעולה זו לא ניתנת לביטול.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setShowClearConfirm(false)}>ביטול</Button>
-                <Button variant="destructive" onClick={handleClearDeliveries}>מחק משלוחים</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+      <DashboardActions 
+        handleArchive={handleArchive}
+        setShowImportModal={setShowImportModal}
+        handleSync={handleSync}
+        isSyncing={isSyncing}
+        showClearConfirm={showClearConfirm}
+        setShowClearConfirm={setShowClearConfirm}
+        handleClearDeliveries={handleClearDeliveries}
+      />
 
       <main className="pb-16">
-        {viewMode === "table" ? (
-          <DeliveryTable
-            deliveries={deliveries}
-            onUpdateStatus={handleUpdateStatus}
-            onCompleteDelivery={handleDeliveryCompletion}
-            isLoading={isLoading}
-            sheetsUrl={user?.sheetsUrl}
-            statusOptions={deliveryStatusOptions}
-          />
-        ) : (
-          <DeliveryGroups
-            groups={groupsRecord}
-            statusOptions={deliveryStatusOptions}
-            onUpdateStatus={handleUpdateStatus}
-            onCompleteDelivery={handleDeliveryCompletion}
-            isLoading={isLoading}
-          />
-        )}
+        <DashboardContent
+          viewMode={viewMode}
+          deliveries={deliveries}
+          onUpdateStatus={handleUpdateStatus}
+          onCompleteDelivery={handleDeliveryCompletion}
+          isLoading={isLoading}
+          sheetsUrl={user?.sheetsUrl}
+          statusOptions={deliveryStatusOptions}
+          groupsRecord={groupsRecord}
+        />
       </main>
       
       {selectedDelivery && (
